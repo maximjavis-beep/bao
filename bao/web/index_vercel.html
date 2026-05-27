@@ -161,7 +161,7 @@ function doGenerateSingle() {
   fetch('/api/weave', { method: 'POST', body: fd }).then(r => r.json()).then(d => {
     btn.disabled = false; btn.textContent = '🧵 单件生成';
     if (!d.success) { toast('失败: '+d.error, true); return; }
-    let dl = document.getElementById('dl-btn'); dl.href = d.download_url; dl.style.display = 'block'; dl.textContent = '⬇ 下载装箱单';
+    let dl = document.getElementById('dl-btn'); dl.href = '/api/download/' + d.download_token; dl.style.display = 'block'; dl.textContent = '⬇ 下载装箱单';
     showResultSummary(d); showResultRows(d); toast('✓ 完成');
   }).catch(e => { btn.disabled = false; btn.textContent = '🧵 单件生成'; toast('失败', true); });
 }
@@ -186,7 +186,7 @@ function showBatchResult(d) {
   let h = '<div style="margin-top:8px">';
   if (d.zip_b64) h += '<a class="btn btn-zip" href="javascript:void(0)" onclick="downloadZipB64(\''+d.zip_b64+'\')">📥 批量下载 ZIP</a>';
   d.results.forEach(r => {
-    if (r.success) h += '<div style="font-size:12px;padding:4px 0"><span class="ok">✓</span> '+esc(r.shipment_id)+' <a href="'+r.download_url+'" style="color:#4a90d9;font-size:11px">下载</a></div>';
+    if (r.success) h += '<div style="font-size:12px;padding:4px 0"><span class="ok">✓</span> '+esc(r.shipment_id)+' <a href="/api/download/'+r.download_token+'" style="color:#4a90d9;font-size:11px">下载</a></div>';
     else h += '<div style="font-size:12px;padding:4px 0"><span class="fail">✗</span> '+esc(r.filename)+' — '+esc(r.error)+'</div>';
   });
   h += '</div>'; document.getElementById('batch-result').innerHTML = h;
