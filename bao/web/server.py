@@ -12,6 +12,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import unquote
 
+import openpyxl
+from openpyxl.styles import PatternFill
+
 from ..core.exporter import FBAExporter
 from ..core.weaver import weave_fba
 from ..parsers.fba_parser import FBAParser
@@ -53,6 +56,8 @@ class BaoHandler(BaseHTTPRequestHandler):
             self._handle_weave()
         elif p == "/api/weave-batch":
             self._handle_weave_batch()
+        elif p == "/api/merge-plan":
+            self._handle_merge_plan()
         else:
             self.send_error(404)
 
@@ -229,6 +234,115 @@ class BaoHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self._json({"success": False, "error": str(e)}, 400)
 
+    def _handle_merge_plan(self):
+        """上传调整明细 Excel，按规则映射生成发货计划"""
+        try:
+            body = json.loads(self._read())
+            b64 = body.get("file", "")
+            if not b64:
+                self._json({"success": False, "error": "未提供文件"}, 400)
+                return
+
+            # 保存上传的调整明细
+            UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+            adj_path = UPLOAD_DIR / f"adj_{uuid.uuid4().hex[:6]}.xlsx"
+            adj_path.write_bytes(base64.b64decode(b64))
+
+            # 解析调整明细
+            wb_adj = openpyxl.load_workbook(str(adj_path), data_only=True)
+            ws_adj = wb_adj.active
+            adj_rows = []
+            for r in range(2, ws_adj.max_row + 1):
+                sku = ws_adj.cell(row=r, column=5).value
+                code = ws_adj.cell(row=r, column=6).value
+                if code is None:
+                    continue
+                adj_rows.append({
+                    "识别码": str(code).strip(),
+                    "店铺": str(ws_adj.cell(row=r, column=7).value or "").strip(),
+                    "SKU": str(sku or "").strip(),
+                    "调整FNSKU": str(ws_adj.cell(row=r, column=12).value or "").strip(),
+                    "调整量": ws_adj.cell(row=r, column=10).value,
+                    "调整店铺": str(ws_adj.cell(row=r, column=11).value or "").strip(),
+                })
+            wb_adj.close()
+
+            if not adj_rows:
+                self._json({"success": False, "error": "调整明细无有效数据"}, 400)
+                return
+
+            # 加载发货计划模板
+            template_dir = Path(__file__).parent.parent.parent / "templates"
+            template_path = template_dir / "发货计划-模板.xlsx"
+            if not template_path.exists():
+                template_path = template_dir / "发货计划-模板 .xlsx"
+            if not template_path.exists():
+                self._json({"success": False, "error": f"找不到模板文件: {template_path}"}, 500)
+                return
+
+            wb_plan = openpyxl.load_workbook(str(template_path))
+            ws_plan = wb_plan.active
+
+            # 找到最后一个有内容的行
+            last_row = 1
+            for r in range(2, ws_plan.max_row + 1):
+                has_data = False
+                for c in range(1, ws_plan.max_column + 1):
+                    if ws_plan.cell(row=r, column=c).value is not None:
+                        has_data = True
+                        break
+                if has_data:
+                    last_row = r
+
+            # 黄色填充
+            yellow = PatternFill(start_color="FFFFFF00", end_color="FFFFFF00", fill_type="solid")
+
+            # 按规则映射写入
+            start_row = last_row + 1
+            for i, adj in enumerate(adj_rows):
+                tr = start_row + i
+                d_val = adj["店铺"]  # D列来源
+
+                # C列: 识别码
+                ws_plan.cell(row=tr, column=3).value = adj["识别码"]
+                # D列: 店铺-国家 = 调整明细 店铺
+                ws_plan.cell(row=tr, column=4).value = d_val
+                # E列: 国家 = D列中"-"后面的代码
+                country = d_val.split("-")[-1] if "-" in d_val else ""
+                ws_plan.cell(row=tr, column=5).value = country
+                # F列: SKU
+                ws_plan.cell(row=tr, column=6).value = adj["SKU"]
+                # G列: FNSKU = 调整明细 调整FNSKU
+                ws_plan.cell(row=tr, column=7).value = adj["调整FNSKU"]
+                # J列: 计划发货量 = 调整量
+                qty = int(adj["调整量"]) if adj["调整量"] is not None else None
+                ws_plan.cell(row=tr, column=10).value = qty
+                # K列: 库存数 = 调整量
+                ws_plan.cell(row=tr, column=11).value = qty
+                # P列: 店铺 = 调整明细 调整店铺
+                ws_plan.cell(row=tr, column=16).value = adj["调整店铺"]
+
+                # 整行黄色标注
+                for c in range(1, ws_plan.max_column + 1):
+                    ws_plan.cell(row=tr, column=c).fill = yellow
+
+            # 保存输出
+            out_name = f"发货计划_{uuid.uuid4().hex[:6]}.xlsx"
+            out_path = UPLOAD_DIR / out_name
+            wb_plan.save(str(out_path))
+            wb_plan.close()
+
+            DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(out_path, DOWNLOADS_DIR / out_name)
+
+            self._json({
+                "success": True,
+                "download_url": f"/downloads/{out_name}",
+                "row_count": len(adj_rows),
+            })
+        except Exception as e:
+            self._json({"success": False, "error": str(e)}, 400)
+
     def _handle_download_zip(self):
         """将所有已生成的装箱单打包为 zip 下载"""
         import subprocess, sys, traceback
@@ -273,7 +387,10 @@ class BaoHandler(BaseHTTPRequestHandler):
 
 
 def run_server(port: int = 8888):
-    server = HTTPServer(("0.0.0.0", port), BaoHandler)
+    import socketserver
+    class ReusableServer(HTTPServer):
+        allow_reuse_address = True
+    server = ReusableServer(("0.0.0.0", port), BaoHandler)
     print(f"🚀 bao Web 面板 — http://127.0.0.1:{port}")
     try:
         server.serve_forever()
