@@ -158,13 +158,9 @@ async def api_merge_plan(file: UploadFile = File(...)):
                 ws.cell(row=tr, column=c).fill = yellow
         out = UPLOAD_DIR / f"发货计划_{uuid.uuid4().hex[:6]}.xlsx"
         wb.save(str(out)); wb.close()
-        data = out.read_bytes()
+        file_b64 = base64.b64encode(out.read_bytes()).decode()
         out.unlink(missing_ok=True)
-        return Response(content=data,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": "attachment; filename=发货计划.xlsx",
-                     "X-Bao-Row-Count": str(len(adj_rows)),
-                     "Access-Control-Expose-Headers": "X-Bao-Row-Count"})
+        return JSONResponse({"success": True, "file_b64": file_b64, "row_count": len(adj_rows)})
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, 400)
 
