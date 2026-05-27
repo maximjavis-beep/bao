@@ -50,8 +50,9 @@ async def api_weave(file: UploadFile = File(...), hs_code: str = Form(None)):
         woven = weave_fba(data, hs_code_override=hs_code or None)
         out = UPLOAD_DIR / f"{meta.get('shipment_id','UNKNOWN')}-装箱单_{uuid.uuid4().hex[:6]}.xlsx"
         FBAExporter().export(woven, str(out))
-        token = _make_token(out)
-        return JSONResponse({"success": True, "download_token": token, "summary": {
+        file_b64 = base64.b64encode(out.read_bytes()).decode()
+        out.unlink(missing_ok=True)
+        return JSONResponse({"success": True, "file_b64": file_b64, "summary": {
             "shipment_id": woven["shipment_id"], "total_boxes": woven["total_boxes"],
             "total_weight": woven["total_weight"], "total_cbm": woven["total_cbm"],
             "row_count": len(woven["rows"])}, "rows": woven["rows"]})
@@ -72,9 +73,10 @@ async def api_weave_batch(files: list[UploadFile] = File(...), hs_code: str = Fo
                 woven = weave_fba(d, hs_code_override=hs_code or None)
                 out = UPLOAD_DIR / f"{meta.get('shipment_id','UNKNOWN')}-装箱单_{uuid.uuid4().hex[:6]}.xlsx"
                 exporter.export(woven, str(out))
-                token = _make_token(out)
+                file_b64 = base64.b64encode(out.read_bytes()).decode()
+                out.unlink(missing_ok=True)
                 results.append({"filename": f.filename or "未知", "success": True,
-                    "shipment_id": meta.get("shipment_id",""), "download_token": token,
+                    "shipment_id": meta.get("shipment_id",""), "file_b64": file_b64,
                     "summary": {"shipment_id": woven["shipment_id"], "total_boxes": woven["total_boxes"],
                     "total_weight": woven["total_weight"], "total_cbm": woven["total_cbm"], "row_count": len(woven["rows"])}})
             except Exception as e:
@@ -85,8 +87,8 @@ async def api_weave_batch(files: list[UploadFile] = File(...), hs_code: str = Fo
             try:
                 bid = uuid.uuid4().hex[:6]; td = UPLOAD_DIR / f"batch_{bid}"; td.mkdir(parents=True, exist_ok=True)
                 for r in ok:
-                    t = r.get("download_token","")
-                    if t in _DOWNLOAD_SLOTS: (td / f"{r['shipment_id']}.xlsx").write_bytes(base64.b64decode(_DOWNLOAD_SLOTS[t]))
+                    fb = r.get("file_b64","")
+                    if fb: (td / f"{r['shipment_id']}.xlsx").write_bytes(base64.b64decode(fb))
                 zd = str(UPLOAD_DIR / f"batch_{bid}.zip")
                 try:
                     import subprocess as sp
