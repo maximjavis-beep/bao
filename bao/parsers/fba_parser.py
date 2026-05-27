@@ -21,7 +21,7 @@ class FBAParser:
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"文件不存在: {file_path}")
-        wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+        wb = openpyxl.load_workbook(file_path, data_only=True)
         ws = wb["packing"] if "packing" in wb.sheetnames else wb.active
         meta = self._extract_meta(ws)
         header_row = self._find_header_row(ws)

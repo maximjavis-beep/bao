@@ -43,11 +43,13 @@ async def api_parse(file: UploadFile = File(...)):
         tmp = UPLOAD_DIR / f"fba_{uuid.uuid4().hex[:6]}.xlsx"
         tmp.write_bytes(await file.read())
         data = parser.parse(str(tmp))
+        items = data.get("items", [])
         return JSONResponse({
             "success": True,
             "meta": data.get("meta", {}),
-            "items": data.get("items", []),
-            "item_count": len(data.get("items", [])),
+            "items": items,
+            "item_count": len(items),
+            "_debug": {"file_exists": tmp.exists(), "file_size": tmp.stat().st_size if tmp.exists() else 0},
         })
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, 400)
