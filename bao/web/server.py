@@ -235,108 +235,124 @@ class BaoHandler(BaseHTTPRequestHandler):
             self._json({"success": False, "error": str(e)}, 400)
 
     def _handle_merge_plan(self):
-        """上传调整明细 Excel，按规则映射生成发货计划"""
+        """上传调整明细 + 发货计划，按四步规则调整后输出"""
         try:
             body = json.loads(self._read())
-            b64 = body.get("file", "")
-            if not b64:
-                self._json({"success": False, "error": "未提供文件"}, 400)
+            b64_adj = body.get("file", "")
+            b64_plan = body.get("plan_file", "")
+            if not b64_adj or not b64_plan:
+                self._json({"success": False, "error": "请上传调整明细和发货计划"}, 400)
                 return
 
-            # 保存上传的调整明细
             UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-            adj_path = UPLOAD_DIR / f"adj_{uuid.uuid4().hex[:6]}.xlsx"
-            adj_path.write_bytes(base64.b64decode(b64))
 
-            # 解析调整明细（按表头名称定位列）
+            # 保存调整明细
+            adj_path = UPLOAD_DIR / f"adj_{uuid.uuid4().hex[:6]}.xlsx"
+            adj_path.write_bytes(base64.b64decode(b64_adj))
+            # 保存发货计划
+            plan_path = UPLOAD_DIR / f"plan_{uuid.uuid4().hex[:6]}.xlsx"
+            plan_path.write_bytes(base64.b64decode(b64_plan))
+
+            # ====== 解析调整明细（按表头名称定位列） ======
             wb_adj = openpyxl.load_workbook(str(adj_path), data_only=True)
             ws_adj = wb_adj.active
             col_idx = {}
             for c in range(1, ws_adj.max_column + 1):
                 h = str(ws_adj.cell(row=1, column=c).value or "")
                 if h.strip() == "SKU": col_idx["SKU"] = c
+                elif "调整单号" in h: col_idx["调整单号"] = c
                 elif "识别码" in h and "新" not in h: col_idx["识别码"] = c
                 elif "调整FNSKU" in h: col_idx["调整FNSKU"] = c
                 elif "调整量" in h: col_idx["调整量"] = c
                 elif "调整店铺" in h: col_idx["调整店铺"] = c
                 elif "店铺" in h and "调整" not in h: col_idx["店铺"] = c
             if "SKU" not in col_idx or "识别码" not in col_idx:
-                wb_adj.close()
-                self._json({"success": False, "error": "未找到SKU或识别码列，请检查调整明细表头"}, 400)
+                wb_adj.close(); wb_plan.close()
+                self._json({"success": False, "error": "未找到SKU或识别码列"}, 400)
                 return
-            adj_rows = []
+            adjustments = []
             for r in range(2, ws_adj.max_row + 1):
                 code = ws_adj.cell(row=r, column=col_idx["识别码"]).value
-                if code is None:
-                    continue
-                adj_rows.append({
+                if code is None: continue
+                qty = ws_adj.cell(row=r, column=col_idx.get("调整量",0)).value
+                adjustments.append({
+                    "调整单号": str(ws_adj.cell(row=r, column=col_idx.get("调整单号",0)).value or "").strip(),
                     "识别码": str(code).strip(),
-                    "店铺": str(ws_adj.cell(row=r, column=col_idx.get("店铺",0)).value or "").strip() if col_idx.get("店铺") else "",
+                    "店铺": str(ws_adj.cell(row=r, column=col_idx.get("店铺",0)).value or "").strip(),
                     "SKU": str(ws_adj.cell(row=r, column=col_idx["SKU"]).value or "").strip(),
                     "调整FNSKU": str(ws_adj.cell(row=r, column=col_idx.get("调整FNSKU",0)).value or "").strip(),
-                    "调整量": ws_adj.cell(row=r, column=col_idx.get("调整量",0)).value if col_idx.get("调整量") else None,
+                    "调整量": int(qty) if qty is not None else 0,
                     "调整店铺": str(ws_adj.cell(row=r, column=col_idx.get("调整店铺",0)).value or "").strip(),
                 })
             wb_adj.close()
 
-            if not adj_rows:
+            if not adjustments:
                 self._json({"success": False, "error": "调整明细无有效数据"}, 400)
                 return
 
-            # 加载发货计划模板
-            template_dir = Path(__file__).parent.parent.parent / "templates"
-            template_path = template_dir / "发货计划-模板.xlsx"
-            if not template_path.exists():
-                template_path = template_dir / "发货计划-模板 .xlsx"
-            if not template_path.exists():
-                self._json({"success": False, "error": f"找不到模板文件: {template_path}"}, 500)
-                return
-
-            wb_plan = openpyxl.load_workbook(str(template_path))
+            # ====== 打开发货计划（用户上传的文件） ======
+            wb_plan = openpyxl.load_workbook(str(plan_path))
             ws_plan = wb_plan.active
 
-            # 找到最后一个有内容的行
-            last_row = 1
+            # 解析计划表
+            plan_rows = []
             for r in range(2, ws_plan.max_row + 1):
-                has_data = False
-                for c in range(1, ws_plan.max_column + 1):
-                    if ws_plan.cell(row=r, column=c).value is not None:
-                        has_data = True
+                plan_rows.append({
+                    "r": r,
+                    "识别码": str(ws_plan.cell(row=r, column=3).value or "").strip(),
+                    "FNSKU": str(ws_plan.cell(row=r, column=6).value or "").strip(),
+                    "店铺": str(ws_plan.cell(row=r, column=15).value or "").strip(),
+                    "计划发货量": int(ws_plan.cell(row=r, column=9).value) if ws_plan.cell(row=r, column=9).value else 0,
+                    "箱数": int(ws_plan.cell(row=r, column=8).value) if ws_plan.cell(row=r, column=8).value else 0,
+                    "is_new": (ws_plan.cell(row=r, column=1).value is None),
+                })
+
+            # ====== 规则13: 筛选同店铺 + 规则14: 识别码+FNSKU匹配 ======
+            match_map = {}
+            for adj in adjustments:
+                for pr in plan_rows:
+                    if adj["调整店铺"] == pr["店铺"] and adj["识别码"] == pr["识别码"] and adj["调整FNSKU"] == pr["FNSKU"]:
+                        key = (adj["识别码"], adj["调整FNSKU"])
+                        if key not in match_map:
+                            match_map[key] = {"plan_row": pr, "adjustments": [], "total_adj_qty": 0}
+                        match_map[key]["adjustments"].append(adj)
+                        match_map[key]["total_adj_qty"] += adj["调整量"]
                         break
-                if has_data:
-                    last_row = r
 
-            # 黄色填充
+            # ====== 规则15: 数量判断 + 规则16: 写入和清理 ======
             yellow = PatternFill(start_color="FFFFFF00", end_color="FFFFFF00", fill_type="solid")
+            deleted = set()
 
-            # 按规则映射写入
-            start_row = last_row + 1
-            for i, adj in enumerate(adj_rows):
-                tr = start_row + i
-                d_val = adj["店铺"]  # D列来源
+            for key, data in match_map.items():
+                pr = data["plan_row"]
+                adj_list = data["adjustments"]
+                r = pr["r"]
+                adj_nos = ",".join(sorted(set(a["调整单号"] for a in adj_list)))
 
-                # C列: 识别码
-                ws_plan.cell(row=tr, column=3).value = adj["识别码"]
-                # D列: 店铺-国家 = 调整明细 店铺
-                ws_plan.cell(row=tr, column=4).value = d_val
-                # E列: 国家 = D列中"-"后面的代码
-                country = d_val.split("-")[-1] if "-" in d_val else ""
-                ws_plan.cell(row=tr, column=5).value = country
-                # F列: SKU
-                ws_plan.cell(row=tr, column=6).value = adj["SKU"]
-                # G列: FNSKU = 调整明细 调整FNSKU
-                ws_plan.cell(row=tr, column=7).value = adj["调整FNSKU"]
-                # J列: 计划发货量 = 调整量
-                qty = int(adj["调整量"]) if adj["调整量"] is not None else None
-                ws_plan.cell(row=tr, column=10).value = qty
-                # K列: 库存数 = 调整量
-                ws_plan.cell(row=tr, column=11).value = qty
-                # P列: 店铺 = 调整明细 调整店铺
-                ws_plan.cell(row=tr, column=16).value = adj["调整店铺"]
+                # 填入调整单号（列17=调拨单号/调拨量）
+                ws_plan.cell(row=r, column=17).value = adj_nos
+                # 更新国家列为调整店铺
+                ws_plan.cell(row=r, column=4).value = adj_list[0]["调整店铺"]
+                # 补库存箱数（覆盖公式或空值）
+                v = ws_plan.cell(row=r, column=11).value
+                if v is None or (isinstance(v, str) and v.startswith("=")):
+                    ws_plan.cell(row=r, column=11).value = pr["箱数"]
 
-                # 整行黄色标注
-                for c in range(1, ws_plan.max_column + 1):
-                    ws_plan.cell(row=tr, column=c).fill = yellow
+            # 删除已处理的黄色新增行
+            for pr in plan_rows:
+                if pr["is_new"]:
+                    key = (pr["识别码"], pr["FNSKU"])
+                    if key in match_map:
+                        for c in range(1, ws_plan.max_column + 1):
+                            ws_plan.cell(row=pr["r"], column=c).value = None
+                        deleted.add(pr["r"])
+
+            # 补全所有行的库存箱数（覆盖公式或空值）
+            for pr in plan_rows:
+                if pr["r"] not in deleted and pr["箱数"] > 0:
+                    v = ws_plan.cell(row=pr["r"], column=11).value
+                    if v is None or (isinstance(v, str) and v.startswith("=")):
+                        ws_plan.cell(row=pr["r"], column=11).value = pr["箱数"]
 
             # 保存输出
             out_name = f"发货计划_{uuid.uuid4().hex[:6]}.xlsx"
@@ -350,7 +366,8 @@ class BaoHandler(BaseHTTPRequestHandler):
             self._json({
                 "success": True,
                 "download_url": f"/downloads/{out_name}",
-                "row_count": len(adj_rows),
+                "matched": len(match_map),
+                "deleted": len(deleted),
             })
         except Exception as e:
             self._json({"success": False, "error": str(e)}, 400)

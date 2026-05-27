@@ -76,11 +76,17 @@ tr:hover td{background:#f8faff}
     <label class="upload-zone" id="plan-drop-zone">
       <input type="file" id="plan-file-input" accept=".xlsx" onchange="handlePlanFile(this)">
       <div class="icon">📁</div>
-      <div class="text">上传调整明细 Excel</div>
+      <div class="text">1. 上传调整明细</div>
     </label>
     <div class="plan-info" id="plan-file-info"></div>
-    <button class="btn btn-plan" id="plan-gen-btn" disabled onclick="doMergePlan()">🔀 生成发货计划</button>
-    <a class="btn btn-dl" id="plan-dl-btn" href="#" download>⬇ 下载发货计划</a>
+    <label class="upload-zone" id="adj-plan-drop-zone" style="margin-top:4px">
+      <input type="file" id="adj-plan-file-input" accept=".xlsx" onchange="handleAdjPlanFile(this)">
+      <div class="icon">📋</div>
+      <div class="text">2. 上传发货计划</div>
+    </label>
+    <div class="plan-info" id="adj-plan-file-info"></div>
+    <button class="btn btn-plan" id="plan-gen-btn" disabled onclick="doMergePlan()">🔀 生成调整后发货计划</button>
+    <a class="btn btn-dl" id="plan-dl-btn" href="#" download>⬇ 下载结果</a>
   </div>
   <div class="top-center" id="plan-preview">
     <div class="empty"><div class="icon">📋</div>上传调整明细后在此预览映射结果</div>
@@ -125,7 +131,7 @@ tr:hover td{background:#f8faff}
 <div class="toast" id="toast"></div>
 
 <script>
-let state = { files: [], parsed: null, woven: null, batchResult: null, planFile: null };
+let state = { files: [], parsed: null, woven: null, batchResult: null, planFile: null, adjPlanFile: null };
 let toastTimer;
 
 // ====== 上屏：调整明细 → 发货计划 ======
@@ -142,41 +148,57 @@ function handlePlanFile(input) {
   if (input.files.length === 0) return;
   state.planFile = input.files[0];
   document.getElementById('plan-file-info').textContent = '✓ ' + esc(state.planFile.name);
-  document.getElementById('plan-gen-btn').disabled = false;
+  checkPlanReady();
+}
+
+function handleAdjPlanFile(input) {
+  if (input.files.length === 0) return;
+  state.adjPlanFile = input.files[0];
+  document.getElementById('adj-plan-file-info').textContent = '✓ ' + esc(state.adjPlanFile.name);
+  checkPlanReady();
+}
+
+function checkPlanReady() {
+  document.getElementById('plan-gen-btn').disabled = !(state.planFile && state.adjPlanFile);
 }
 
 function doMergePlan() {
-  if (!state.planFile) return toast('请先上传调整明细', true);
+  if (!state.planFile || !state.adjPlanFile) return toast('请先上传调整明细和发货计划', true);
   let btn = document.getElementById('plan-gen-btn');
   btn.disabled = true; btn.textContent = '⏳ 生成中…';
 
-  let r = new FileReader();
-  r.onload = () => {
-    let b64 = r.result.split(',')[1];
-    fetch('/api/merge-plan', {
-      method: 'POST',
-      body: JSON.stringify({ file: b64 }),
+  let r1 = new FileReader();
+  r1.onload = () => {
+    let b64_adj = r1.result.split(',')[1];
+    let r2 = new FileReader();
+    r2.onload = () => {
+      let b64_plan = r2.result.split(',')[1];
+      fetch('/api/merge-plan', {
+        method: 'POST',
+        body: JSON.stringify({ file: b64_adj, plan_file: b64_plan }),
       headers: {'Content-Type': 'application/json'}
     })
     .then(res => res.json())
     .then(d => {
-      btn.disabled = false; btn.textContent = '🔀 生成发货计划';
+      btn.disabled = false; btn.textContent = '🔀 生成调整后发货计划';
       if (!d.success) { toast('生成失败: ' + d.error, true); return; }
       let dl = document.getElementById('plan-dl-btn');
       dl.href = d.download_url;
       dl.download = d.download_url.split('/').pop();
       dl.style.display = 'block';
       dl.textContent = '⬇ 下载发货计划';
-      toast('✓ 生成完成 — ' + d.row_count + ' 行数据');
+      toast('✓ 调整完成 — 匹配' + (d.matched||0) + '组, 删除' + (d.deleted||0) + '行');
       document.getElementById('plan-summary').innerHTML =
         '<div class="section-title">📊 映射统计</div>' +
-        '<div class="info-grid"><div class="info-card"><div class="num" style="color:#e67e22">' + (d.row_count||'-') + '</div><div class="lbl">映射行数</div></div></div>';
+        '<div class="info-grid"><div class="info-card"><div class="num" style="color:#e67e22">' + (d.matched||'-') + '</div><div class="lbl">匹配组</div></div><div class="info-card"><div class="num">' + (d.deleted||'-') + '</div><div class="lbl">删除行</div></div></div>';
       document.getElementById('plan-preview').innerHTML =
-        '<div class="empty"><div class="icon" style="font-size:28px">✅</div>生成完成<br><span style="font-size:11px;color:#888">' + (d.row_count||0) + ' 行已映射到发货计划模板</span></div>';
+        '<div class="empty"><div class="icon" style="font-size:28px">✅</div>调整完成<br><span style="font-size:11px;color:#888">匹配' + (d.matched||0) + '组, 删除' + (d.deleted||0) + '行</span></div>';
     })
-    .catch(e => { btn.disabled = false; btn.textContent = '🔀 生成发货计划'; toast('生成失败', true); });
+    .catch(e => { btn.disabled = false; btn.textContent = '🔀 生成调整后发货计划'; toast('生成失败', true); });
+    };
+    r2.readAsDataURL(state.adjPlanFile);
   };
-  r.readAsDataURL(state.planFile);
+  r1.readAsDataURL(state.planFile);
 }
 
 // ====== 下屏：FBA 装箱单 ======
