@@ -27,8 +27,7 @@ class FBAParser:
         header_row = self._find_header_row(ws)
         if header_row < 0:
             wb.close()
-            return {"meta": meta, "items": [], "_sheet": ws.title, "_header_row": -1,
-                    "_max_row": ws.max_row, "_col_map": {}}
+            return {"meta": meta, "items": []}
         col_map = self._build_column_map(ws, header_row)
         items = []
         for row_idx in range(header_row + 1, ws.max_row + 1):
@@ -48,9 +47,7 @@ class FBAParser:
                 "box_range": self._cell(ws, row_idx, col_map.get("box_range")),
             })
         wb.close()
-        return {"meta": meta, "items": items, "_sheet": ws.title,
-                "_header_row": header_row, "_max_row": ws.max_row,
-                "_col_map": {k: v for k, v in col_map.items()}}
+        return {"meta": meta, "items": items}
 
     def _extract_meta(self, ws) -> dict:
         meta = {}

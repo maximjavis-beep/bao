@@ -35,10 +35,7 @@ async def api_parse(file: UploadFile = File(...)):
         tmp.write_bytes(await file.read())
         data = FBAParser().parse(str(tmp)); tmp.unlink(missing_ok=True)
         items = data.get("items", [])
-        return JSONResponse({"success": True, "meta": data.get("meta", {}), "items": items,
-            "item_count": len(items), "debug": {
-                "sheet": data.get("_sheet","?"), "header_row": data.get("_header_row",-1),
-                "col_map": data.get("_col_map",{}), "max_row": data.get("_max_row",0)}})
+        return JSONResponse({"success": True, "meta": data.get("meta", {}), "items": items, "item_count": len(items)})
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, 400)
 
