@@ -7,6 +7,8 @@ from fastapi.responses import JSONResponse, HTMLResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from bao.core.exporter import FBAExporter
 from bao.core.weaver import weave_fba
+import openpyxl
+from openpyxl.styles import PatternFill
 from bao.parsers.fba_parser import FBAParser
 
 app = FastAPI(title="bao", version="0.2.0")
@@ -98,6 +100,64 @@ async def api_weave_batch(files: list[UploadFile] = File(...), hs_code: str = Fo
             finally:
                 shutil.rmtree(td, ignore_errors=True); Path(zd).unlink(missing_ok=True)
         return JSONResponse({"success": True, "results": results, "zip_b64": zip_b64})
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, 400)
+
+@app.post("/api/merge-plan")
+async def api_merge_plan(file: UploadFile = File(...)):
+    """上传调整明细 Excel，按规则映射生成发货计划"""
+    try:
+        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = UPLOAD_DIR / f"adj_{uuid.uuid4().hex[:6]}.xlsx"
+        tmp.write_bytes(await file.read())
+        wb_adj = openpyxl.load_workbook(str(tmp), data_only=True)
+        ws_adj = wb_adj.active
+        adj_rows = []
+        for r in range(2, ws_adj.max_row + 1):
+            code = ws_adj.cell(row=r, column=6).value
+            if code is None: continue
+            adj_rows.append({
+                "识别码": str(code).strip(),
+                "店铺": str(ws_adj.cell(row=r, column=7).value or "").strip(),
+                "SKU": str(ws_adj.cell(row=r, column=5).value or "").strip(),
+                "调整FNSKU": str(ws_adj.cell(row=r, column=12).value or "").strip(),
+                "调整量": ws_adj.cell(row=r, column=10).value,
+                "调整店铺": str(ws_adj.cell(row=r, column=11).value or "").strip(),
+            })
+        wb_adj.close(); tmp.unlink(missing_ok=True)
+        if not adj_rows:
+            return JSONResponse({"success": False, "error": "调整明细无有效数据"}, 400)
+        template_path = ROOT_DIR / "templates" / "发货计划-模板.xlsx"
+        if not template_path.exists():
+            template_path = ROOT_DIR / "templates" / "发货计划-模板 .xlsx"
+        if not template_path.exists():
+            return JSONResponse({"success": False, "error": "找不到模板文件"}, 500)
+        wb = openpyxl.load_workbook(str(template_path))
+        ws = wb.active
+        last_row = 1
+        for r in range(2, ws.max_row + 1):
+            if any(ws.cell(row=r, column=c).value is not None for c in range(1, ws.max_column + 1)):
+                last_row = r
+        yellow = PatternFill(start_color="FFFFFF00", end_color="FFFFFF00", fill_type="solid")
+        sr = last_row + 1
+        for i, adj in enumerate(adj_rows):
+            tr = sr + i
+            d_val = adj["店铺"]
+            ws.cell(row=tr, column=3).value = adj["识别码"]
+            ws.cell(row=tr, column=4).value = d_val
+            ws.cell(row=tr, column=5).value = d_val.split("-")[-1] if "-" in d_val else ""
+            ws.cell(row=tr, column=6).value = adj["SKU"]
+            ws.cell(row=tr, column=7).value = adj["调整FNSKU"]
+            qty = int(adj["调整量"]) if adj["调整量"] is not None else None
+            ws.cell(row=tr, column=10).value = qty
+            ws.cell(row=tr, column=11).value = qty
+            ws.cell(row=tr, column=16).value = adj["调整店铺"]
+            for c in range(1, ws.max_column + 1):
+                ws.cell(row=tr, column=c).fill = yellow
+        out = UPLOAD_DIR / f"发货计划_{uuid.uuid4().hex[:6]}.xlsx"
+        wb.save(str(out)); wb.close()
+        token = _make_token(out)
+        return JSONResponse({"success": True, "download_token": token, "row_count": len(adj_rows)})
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, 400)
 
