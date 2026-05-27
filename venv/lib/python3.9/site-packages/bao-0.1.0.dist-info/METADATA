@@ -1,0 +1,69 @@
+Metadata-Version: 2.4
+Name: bao
+Version: 0.1.0
+Summary: 出口报关文件编织助手
+License: MIT
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: typer>=0.9
+Requires-Dist: rich>=13.0
+Requires-Dist: jinja2>=3.1
+Requires-Dist: pandas>=1.5
+Requires-Dist: openpyxl>=3.1
+Requires-Dist: pydantic>=2.0
+Provides-Extra: web
+Requires-Dist: streamlit>=1.28; extra == "web"
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+
+# bao — 出口报关文件编织助手
+
+从发票/装箱单 Excel 一键生成出口报关单，支持校验、导出和归档。
+
+## 安装
+
+```bash
+cd customs/bao
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+pip install -e .
+```
+
+## 快速开始
+
+```bash
+# 仅预览发票内容
+bao build preview -i 发票.xlsx
+
+# 从发票+装箱单生成报关单
+bao build from-files -i 发票.xlsx -p 装箱单.xlsx -o 报关单.xlsx
+
+# 带发货人信息并归档
+bao build from-files -i 发票.xlsx -s "XX进出口有限公司" --save
+```
+
+## 命令
+
+| 命令 | 说明 |
+|------|------|
+| `bao build from-files` | 从发票+装箱单编织生成报关单 |
+| `bao build preview` | 预览发票/装箱单内容 |
+| `bao version` | 查看版本 |
+
+## 项目结构
+
+```
+bao/
+├── bao/                # 源码
+│   ├── cli.py          # CLI 入口
+│   ├── commands/       # 子命令
+│   ├── core/           # 编织引擎、校验、导出
+│   ├── models/         # Pydantic 数据模型
+│   ├── db/             # SQLite 连接与仓储
+│   ├── parsers/        # Excel 解析器
+│   └── web/            # Web 面板 (Phase 5)
+├── templates/          # Jinja2 模板
+├── tests/              # 测试
+└── data/               # 数据库文件
+```

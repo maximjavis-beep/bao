@@ -1,0 +1,2 @@
+[console_scripts]
+bao = bao.cli:app
