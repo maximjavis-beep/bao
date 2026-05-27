@@ -107,7 +107,7 @@ let fd=new FormData();fd.append('file',state.planFile);
 fetch('/api/merge-plan',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{
 btn.disabled=false;btn.textContent='🔀 生成发货计划';
 if(!d.success){toast('生成失败: '+d.error,true);return}
-let dl=document.getElementById('plan-dl-btn');dl.href='/api/download/'+d.download_token;dl.style.display='block';dl.textContent='⬇ 下载发货计划';
+let dl=document.getElementById('plan-dl-btn');dl.onclick=function(){downloadB64(d.file_b64,'发货计划.xlsx')};dl.href='javascript:void(0)';dl.style.display='block';dl.textContent='⬇ 下载发货计划';
 toast('✓ 生成完成 — '+d.row_count+' 行');
 document.getElementById('plan-summary').innerHTML='<div class="section-title">📊 映射统计</div><div class="info-grid"><div class="info-card"><div class="num" style="color:#e67e22">'+(d.row_count||'-')+'</div><div class="lbl">映射行数</div></div></div>';
 document.getElementById('plan-preview').innerHTML='<div class="empty"><div class="icon" style="font-size:28px">✅</div>生成完成<br><span style="font-size:11px;color:#888">'+(d.row_count||0)+' 行已映射到发货计划</span></div>';
@@ -145,6 +145,7 @@ function showResultSummary(d){let s=d.summary||{},h='<div class="section-title s
 
 function showResultRows(d){let rows=d.rows||[],h='<div class="section-title">📋 装箱单明细</div><table><tr><th>箱号段</th><th>件数</th><th>SKU</th><th>HS</th><th>数量</th><th>重量</th><th>尺寸</th></tr>';rows.forEach(r=>{h+='<tr><td>'+esc(r['箱号段'])+'</td><td>'+r['总件数']+'</td><td>'+esc(r['SKU'])+'</td><td>'+esc(r['海关编码'])+'</td><td>'+r['总数量']+'</td><td>'+r['单箱重量']+'</td><td>'+r['长']+'×'+r['宽']+'×'+r['高']+'</td></tr>'});h+='</table>';document.getElementById('preview').innerHTML=h}
 
+function downloadB64(b64,filename){let raw=atob(b64),arr=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);let blob=new Blob([arr],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),url=URL.createObjectURL(blob);let a=document.createElement('a');a.href=url;a.download=filename;a.click();URL.revokeObjectURL(url)}
 function downloadZipB64(b64){let raw=atob(b64),arr=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);let blob=new Blob([arr],{type:'application/zip'}),url=URL.createObjectURL(blob);let a=document.createElement('a');a.href=url;a.download='装箱单_批量.zip';a.click();URL.revokeObjectURL(url)}
 </script>
 </body>
