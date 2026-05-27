@@ -85,6 +85,7 @@ class FBAExporter:
         # 数据行
         for i, rd in enumerate(rows):
             r = DATA_START_ROW + i
+            ws.row_dimensions[r].height = 45
             # 固定值
             for col, val in fixed.items():
                 if val is not None:
