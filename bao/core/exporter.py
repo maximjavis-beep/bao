@@ -1,10 +1,11 @@
 """FBA 装箱单 Excel 导出器 — 基于蜡烛-模版.xlsx"""
+import io
 import shutil
-import uuid
-from datetime import date
+import tempfile
 from pathlib import Path
 import openpyxl
 from openpyxl.cell.cell import MergedCell
+from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import Alignment, Font
 
 _TEMPLATE_PATH = Path(__file__).parent.parent.parent / "templates" / "蜡烛-模版.xlsx"
@@ -42,20 +43,30 @@ class FBAExporter:
         ws = wb["下单模板"]
         rows = woven.get("rows", [])
 
+        # 保存模板中 T 列图片数据 + 尺寸
+        t_img_bytes = None
+        t_w, t_h = 0, 0
+        for img in ws._images:
+            try:
+                t_img_bytes = img._data()
+                t_w, t_h = img.width, img.height
+                break
+            except Exception:
+                pass
+
         # 读取模板 Row 4 固定值
         fixed = {}
         for col in FIXED_COLS:
             v = ws.cell(row=DATA_START_ROW, column=COL[col]).value
             fixed[col] = v
 
-        # 清除数据行 + 图片
+        # 清除数据行值 + 移除所有图片
         for r in range(DATA_START_ROW, 200):
             for c in range(1, 25):
                 cell = ws.cell(row=r, column=c)
                 if not isinstance(cell, MergedCell):
                     cell.value = None
-        for img in list(ws._images):
-            ws._images.remove(img)
+        ws._images.clear()
 
         # Row 2 标题
         ws.cell(row=2, column=COL["F"], value=woven.get("total_boxes", 0))
@@ -66,6 +77,9 @@ class FBAExporter:
 
         center = Alignment(horizontal="center", vertical="center", wrap_text=True)
         bf = Font(name="微软雅黑", size=10)
+
+        # 保留所有 temp 文件路径，save 后再清理
+        _temp_files = []
 
         # 数据行
         for i, rd in enumerate(rows):
@@ -86,6 +100,17 @@ class FBAExporter:
             self._set(ws, r, "W", rd.get("宽", 0), center, bf, YELLOW_FILL)
             self._set(ws, r, "X", rd.get("高", 0), center, bf, YELLOW_FILL)
 
+            # T 列图片：为每行创建副本
+            if t_img_bytes:
+                tf = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+                tf.write(t_img_bytes)
+                tf.close()
+                _temp_files.append(tf.name)
+                img = XLImage(tf.name)
+                img.width, img.height = t_w, t_h
+                img.anchor = f"T{r}"
+                ws.add_image(img)
+
         # 标题样式
         hf = Font(name="微软雅黑", bold=True, size=11)
         for c in range(1, 25):
@@ -96,6 +121,14 @@ class FBAExporter:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         wb.save(output_path)
         wb.close()
+
+        # save 后清理 temp 文件
+        for tf in _temp_files:
+            try:
+                Path(tf).unlink()
+            except Exception:
+                pass
+
         return output_path
 
     def _set(self, ws, row, col, value, align=None, font=None, fill=None):
