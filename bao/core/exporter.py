@@ -6,6 +6,7 @@ from pathlib import Path
 import openpyxl
 from openpyxl.cell.cell import MergedCell
 from openpyxl.drawing.image import Image as XLImage
+from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
 from openpyxl.styles import Alignment, Font
 
 _TEMPLATE_PATH = Path(__file__).parent.parent.parent / "templates" / "蜡烛-模版.xlsx"
@@ -108,7 +109,8 @@ class FBAExporter:
                 _temp_files.append(tf.name)
                 img = XLImage(tf.name)
                 img.width, img.height = t_w, t_h
-                img.anchor = f"T{r}"
+                marker = AnchorMarker(col=COL["T"] - 1, row=r - 1)
+                img.anchor = OneCellAnchor(_from=marker, ext=None)
                 ws.add_image(img)
 
         # 标题样式
