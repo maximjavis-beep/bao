@@ -112,13 +112,11 @@ class FBAExporter:
                 img_w = max(t_w, 120)
                 img_h = max(t_h, 120)
                 img.width, img.height = img_w, img_h
-                marker = AnchorMarker(col=COL["T"] - 1, row=r - 1)
-                from openpyxl.utils.units import pixels_to_EMU
-                from openpyxl.drawing.xdr import XDRPositiveSize2D
-                ext = XDRPositiveSize2D(
-                    cx=pixels_to_EMU(img_w), cy=pixels_to_EMU(img_h)
-                )
-                img.anchor = OneCellAnchor(_from=marker, ext=ext)
+                from openpyxl.drawing.spreadsheet_drawing import TwoCellAnchor
+                anchor = TwoCellAnchor()
+                anchor._from = AnchorMarker(col=COL["T"] - 1, row=r - 1)
+                anchor.to = AnchorMarker(col=COL["T"], row=r)
+                img.anchor = anchor
                 ws.add_image(img)
 
         # 标题样式
