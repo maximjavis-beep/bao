@@ -65,10 +65,12 @@ tr:hover td{background:#f8faff}
 <div class="top-section">
 <div class="top-left">
 <div class="section-title">📋 调整明细 → 发货计划</div>
-<label class="upload-zone" id="plan-drop-zone"><input type="file" id="plan-file-input" accept=".xlsx" onchange="handlePlanFile(this)"><div class="icon">📁</div><div class="text">上传调整明细 Excel</div></label>
+<label class="upload-zone" id="plan-drop-zone"><input type="file" id="plan-file-input" accept=".xlsx" onchange="handlePlanFile(this)"><div class="icon">📁</div><div class="text">1. 上传调整明细</div></label>
 <div class="plan-info" id="plan-file-info"></div>
-<button class="btn btn-plan" id="plan-gen-btn" disabled onclick="doMergePlan()">🔀 生成发货计划</button>
-<a class="btn btn-dl" id="plan-dl-btn" href="#" style="display:none">⬇ 下载发货计划</a>
+<label class="upload-zone" id="adj-plan-drop-zone" style="margin-top:4px"><input type="file" id="adj-plan-file-input" accept=".xlsx" onchange="handleAdjPlanFile(this)"><div class="icon">📋</div><div class="text">2. 上传发货计划</div></label>
+<div class="plan-info" id="adj-plan-file-info"></div>
+<button class="btn btn-plan" id="plan-gen-btn" disabled onclick="doMergePlan()">🔀 生成调整后发货计划</button>
+<a class="btn btn-dl" id="plan-dl-btn" href="#" style="display:none">⬇ 下载结果</a>
 </div>
 <div class="top-center" id="plan-preview"><div class="empty"><div class="icon">📋</div>上传调整明细后点击生成</div></div>
 <div class="top-right" id="plan-summary"><div class="section-title">📊 映射统计</div><div class="empty">等待上传…</div></div>
@@ -90,28 +92,31 @@ tr:hover td{background:#f8faff}
 </div>
 <div class="toast" id="toast"></div>
 <script>
-let state={files:[],parsed:null,planFile:null},toastTimer;
+let state={files:[],parsed:null,planFile:null,adjPlanFile:null},toastTimer;
 
 let pdz=document.getElementById('plan-drop-zone');
 pdz.addEventListener('dragover',e=>{e.preventDefault();pdz.classList.add('active')});
 pdz.addEventListener('dragleave',()=>pdz.classList.remove('active'));
 pdz.addEventListener('drop',e=>{e.preventDefault();pdz.classList.remove('active');document.getElementById('plan-file-input').files=e.dataTransfer.files;handlePlanFile(document.getElementById('plan-file-input'))});
 
-function handlePlanFile(i){if(i.files.length===0)return;state.planFile=i.files[0];document.getElementById('plan-file-info').textContent='✓ '+esc(state.planFile.name);document.getElementById('plan-gen-btn').disabled=false}
+function handlePlanFile(i){if(i.files.length===0)return;state.planFile=i.files[0];document.getElementById('plan-file-info').textContent='✓ '+esc(state.planFile.name);checkPlanReady()}
+function handleAdjPlanFile(i){if(i.files.length===0)return;state.adjPlanFile=i.files[0];document.getElementById('adj-plan-file-info').textContent='✓ '+esc(state.adjPlanFile.name);checkPlanReady()}
+function checkPlanReady(){document.getElementById('plan-gen-btn').disabled=!(state.planFile&&state.adjPlanFile)}
 function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}
 
 function doMergePlan(){
-if(!state.planFile)return toast('请先上传',true);
-let btn=document.getElementById('plan-gen-btn');btn.disabled=true;btn.textContent='⏳ 生成中…';
-let fd=new FormData();fd.append('file',state.planFile);
+if(!state.planFile||!state.adjPlanFile)return toast('请先上传两个文件',true);
+let btn=document.getElementById('plan-gen-btn');btn.disabled=true;btn.textContent='⏳ 调整中…';
+let fd=new FormData();fd.append('file',state.planFile);fd.append('plan_file',state.adjPlanFile);
 fetch('/api/merge-plan',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{
-btn.disabled=false;btn.textContent='🔀 生成发货计划';
-if(!d.success){toast('生成失败: '+d.error,true);return}
-let dl=document.getElementById('plan-dl-btn');dl.onclick=function(){downloadB64(d.file_b64,'发货计划.xlsx')};dl.href='javascript:void(0)';dl.style.display='block';dl.textContent='⬇ 下载发货计划';
-toast('✓ 生成完成 — '+d.row_count+' 行');
-document.getElementById('plan-summary').innerHTML='<div class="section-title">📊 映射统计</div><div class="info-grid"><div class="info-card"><div class="num" style="color:#e67e22">'+(d.row_count||'-')+'</div><div class="lbl">映射行数</div></div></div>';
-document.getElementById('plan-preview').innerHTML='<div class="empty"><div class="icon" style="font-size:28px">✅</div>生成完成<br><span style="font-size:11px;color:#888">'+(d.row_count||0)+' 行已映射到发货计划</span></div>';
-}).catch(()=>{btn.disabled=false;btn.textContent='🔀 生成发货计划';toast('失败',true)})
+btn.disabled=false;btn.textContent='🔀 生成调整后发货计划';
+if(!d.success){toast('调整失败: '+d.error,true);return}
+downloadB64(d.file_b64,'发货计划调整.xlsx');
+let dl=document.getElementById('plan-dl-btn');dl.onclick=function(){downloadB64(d.file_b64,'发货计划调整.xlsx')};dl.href='javascript:void(0)';dl.style.display='block';dl.textContent='⬇ 重新下载';
+toast('✓ 调整完成 — 匹配'+(d.matched||0)+'组,删除'+(d.deleted||0)+'行');
+document.getElementById('plan-summary').innerHTML='<div class="section-title">📊 映射统计</div><div class="info-grid"><div class="info-card"><div class="num" style="color:#e67e22">'+(d.matched||'-')+'</div><div class="lbl">匹配组</div></div><div class="info-card"><div class="num">'+(d.deleted||'-')+'</div><div class="lbl">删除行</div></div></div>';
+document.getElementById('plan-preview').innerHTML='<div class="empty"><div class="icon" style="font-size:28px">✅</div>调整完成<br><span style="font-size:11px;color:#888">匹配'+(d.matched||0)+'组, 删除'+(d.deleted||0)+'行</span></div>';
+}).catch(function(){btn.disabled=false;btn.textContent='🔀 生成调整后发货计划';toast('失败',true)})
 }
 
 let dz=document.getElementById('drop-zone');

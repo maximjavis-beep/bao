@@ -106,74 +106,103 @@ async def api_weave_batch(files: list[UploadFile] = File(...), hs_code: str = Fo
         return JSONResponse({"success": False, "error": str(e)}, 400)
 
 @app.post("/api/merge-plan")
-async def api_merge_plan(file: UploadFile = File(...)):
-    """上传调整明细 Excel，按规则映射生成发货计划"""
+async def api_merge_plan(file: UploadFile = File(...), plan_file: UploadFile = File(None)):
+    """上传调整明细 + 发货计划，按四步规则调整后输出"""
     try:
+        if not plan_file:
+            return JSONResponse({"success": False, "error": "请同时上传调整明细和发货计划"}, 400)
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        tmp = UPLOAD_DIR / f"adj_{uuid.uuid4().hex[:6]}.xlsx"
-        tmp.write_bytes(await file.read())
-        wb_adj = openpyxl.load_workbook(str(tmp), data_only=True)
+
+        tmp_adj = UPLOAD_DIR / f"adj_{uuid.uuid4().hex[:6]}.xlsx"
+        tmp_adj.write_bytes(await file.read())
+        tmp_plan = UPLOAD_DIR / f"plan_{uuid.uuid4().hex[:6]}.xlsx"
+        tmp_plan.write_bytes(await plan_file.read())
+
+        # 解析调整明细
+        wb_adj = openpyxl.load_workbook(str(tmp_adj), data_only=True)
         ws_adj = wb_adj.active
-        # 按表头名称定位列，兼容不同列序的调整明细
         col_idx = {}
         for c in range(1, ws_adj.max_column + 1):
             h = str(ws_adj.cell(row=1, column=c).value or "")
             if h.strip() == "SKU": col_idx["SKU"] = c
+            elif "调整单号" in h: col_idx["调整单号"] = c
             elif "识别码" in h and "新" not in h: col_idx["识别码"] = c
             elif "调整FNSKU" in h: col_idx["调整FNSKU"] = c
             elif "调整量" in h: col_idx["调整量"] = c
             elif "调整店铺" in h: col_idx["调整店铺"] = c
             elif "店铺" in h and "调整" not in h: col_idx["店铺"] = c
         if "SKU" not in col_idx or "识别码" not in col_idx:
-            wb_adj.close(); tmp.unlink(missing_ok=True)
-            return JSONResponse({"success": False, "error": "未找到SKU或识别码列，请检查调整明细表头"}, 400)
-        adj_rows = []
+            wb_adj.close(); tmp_adj.unlink(missing_ok=True); tmp_plan.unlink(missing_ok=True)
+            return JSONResponse({"success": False, "error": "未找到SKU或识别码列"}, 400)
+        adjustments = []
         for r in range(2, ws_adj.max_row + 1):
             code = ws_adj.cell(row=r, column=col_idx["识别码"]).value
             if code is None: continue
-            adj_rows.append({
+            qty = ws_adj.cell(row=r, column=col_idx.get("调整量",0)).value
+            adjustments.append({
+                "调整单号": str(ws_adj.cell(row=r, column=col_idx.get("调整单号",0)).value or "").strip(),
                 "识别码": str(code).strip(),
-                "店铺": str(ws_adj.cell(row=r, column=col_idx.get("店铺",0)).value or "").strip() if col_idx.get("店铺") else "",
+                "店铺": str(ws_adj.cell(row=r, column=col_idx.get("店铺",0)).value or "").strip(),
                 "SKU": str(ws_adj.cell(row=r, column=col_idx["SKU"]).value or "").strip(),
                 "调整FNSKU": str(ws_adj.cell(row=r, column=col_idx.get("调整FNSKU",0)).value or "").strip(),
-                "调整量": ws_adj.cell(row=r, column=col_idx.get("调整量",0)).value if col_idx.get("调整量") else None,
+                "调整量": int(qty) if qty is not None else 0,
                 "调整店铺": str(ws_adj.cell(row=r, column=col_idx.get("调整店铺",0)).value or "").strip(),
             })
-        wb_adj.close(); tmp.unlink(missing_ok=True)
-        if not adj_rows:
+        wb_adj.close(); tmp_adj.unlink(missing_ok=True)
+        if not adjustments:
+            tmp_plan.unlink(missing_ok=True)
             return JSONResponse({"success": False, "error": "调整明细无有效数据"}, 400)
-        template_path = ROOT_DIR / "templates" / "发货计划-模板.xlsx"
-        if not template_path.exists():
-            template_path = ROOT_DIR / "templates" / "发货计划-模板 .xlsx"
-        if not template_path.exists():
-            return JSONResponse({"success": False, "error": "找不到模板文件"}, 500)
-        wb = openpyxl.load_workbook(str(template_path))
-        ws = wb.active
-        last_row = 1
-        for r in range(2, ws.max_row + 1):
-            if any(ws.cell(row=r, column=c).value is not None for c in range(1, ws.max_column + 1)):
-                last_row = r
-        yellow = PatternFill(start_color="FFFFFF00", end_color="FFFFFF00", fill_type="solid")
-        sr = last_row + 1
-        for i, adj in enumerate(adj_rows):
-            tr = sr + i
-            d_val = adj["店铺"]
-            ws.cell(row=tr, column=3).value = adj["识别码"]
-            ws.cell(row=tr, column=4).value = d_val
-            ws.cell(row=tr, column=5).value = d_val.split("-")[-1] if "-" in d_val else ""
-            ws.cell(row=tr, column=6).value = adj["SKU"]
-            ws.cell(row=tr, column=7).value = adj["调整FNSKU"]
-            qty = int(adj["调整量"]) if adj["调整量"] is not None else None
-            ws.cell(row=tr, column=10).value = qty
-            ws.cell(row=tr, column=11).value = qty
-            ws.cell(row=tr, column=16).value = adj["调整店铺"]
-            for c in range(1, ws.max_column + 1):
-                ws.cell(row=tr, column=c).fill = yellow
+        wb_plan = openpyxl.load_workbook(str(tmp_plan))
+        ws_plan = wb_plan.active
+        plan_rows = []
+        for r in range(2, ws_plan.max_row + 1):
+            plan_rows.append({
+                "r": r,
+                "识别码": str(ws_plan.cell(row=r, column=3).value or "").strip(),
+                "FNSKU": str(ws_plan.cell(row=r, column=6).value or "").strip(),
+                "店铺": str(ws_plan.cell(row=r, column=15).value or "").strip(),
+                "计划发货量": int(ws_plan.cell(row=r, column=9).value) if ws_plan.cell(row=r, column=9).value else 0,
+                "箱数": int(ws_plan.cell(row=r, column=8).value) if ws_plan.cell(row=r, column=8).value else 0,
+                "is_new": (ws_plan.cell(row=r, column=1).value is None),
+            })
+        match_map = {}
+        for adj in adjustments:
+            for pr in plan_rows:
+                if adj["调整店铺"] == pr["店铺"] and adj["识别码"] == pr["识别码"] and adj["调整FNSKU"] == pr["FNSKU"]:
+                    key = (adj["识别码"], adj["调整FNSKU"])
+                    if key not in match_map:
+                        match_map[key] = {"plan_row": pr, "adjustments": [], "total_adj_qty": 0}
+                    match_map[key]["adjustments"].append(adj)
+                    match_map[key]["total_adj_qty"] += adj["调整量"]
+                    break
+        deleted = set()
+        for key, data in match_map.items():
+            pr = data["plan_row"]
+            adj_list = data["adjustments"]
+            r = pr["r"]
+            adj_nos = ",".join(sorted(set(a["调整单号"] for a in adj_list)))
+            ws_plan.cell(row=r, column=17).value = adj_nos
+            ws_plan.cell(row=r, column=4).value = adj_list[0]["调整店铺"]
+            v = ws_plan.cell(row=r, column=11).value
+            if v is None or (isinstance(v, str) and v.startswith("=")):
+                ws_plan.cell(row=r, column=11).value = pr["箱数"]
+        for pr in plan_rows:
+            if pr["is_new"]:
+                key = (pr["识别码"], pr["FNSKU"])
+                if key in match_map:
+                    for c in range(1, ws_plan.max_column + 1):
+                        ws_plan.cell(row=pr["r"], column=c).value = None
+                    deleted.add(pr["r"])
+        for pr in plan_rows:
+            if pr["r"] not in deleted and pr["箱数"] > 0:
+                v = ws_plan.cell(row=pr["r"], column=11).value
+                if v is None or (isinstance(v, str) and v.startswith("=")):
+                    ws_plan.cell(row=pr["r"], column=11).value = pr["箱数"]
         out = UPLOAD_DIR / f"发货计划_{uuid.uuid4().hex[:6]}.xlsx"
-        wb.save(str(out)); wb.close()
+        wb_plan.save(str(out)); wb_plan.close(); tmp_plan.unlink(missing_ok=True)
         file_b64 = base64.b64encode(out.read_bytes()).decode()
         out.unlink(missing_ok=True)
-        return JSONResponse({"success": True, "file_b64": file_b64, "row_count": len(adj_rows)})
+        return JSONResponse({"success": True, "file_b64": file_b64, "matched": len(match_map), "deleted": len(deleted)})
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, 400)
 
