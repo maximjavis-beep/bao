@@ -114,17 +114,30 @@ async def api_merge_plan(file: UploadFile = File(...)):
         tmp.write_bytes(await file.read())
         wb_adj = openpyxl.load_workbook(str(tmp), data_only=True)
         ws_adj = wb_adj.active
+        # 按表头名称定位列，兼容不同列序的调整明细
+        col_idx = {}
+        for c in range(1, ws_adj.max_column + 1):
+            h = str(ws_adj.cell(row=1, column=c).value or "")
+            if h.strip() == "SKU": col_idx["SKU"] = c
+            elif "识别码" in h and "新" not in h: col_idx["识别码"] = c
+            elif "调整FNSKU" in h: col_idx["调整FNSKU"] = c
+            elif "调整量" in h: col_idx["调整量"] = c
+            elif "调整店铺" in h: col_idx["调整店铺"] = c
+            elif "店铺" in h and "调整" not in h: col_idx["店铺"] = c
+        if "SKU" not in col_idx or "识别码" not in col_idx:
+            wb_adj.close(); tmp.unlink(missing_ok=True)
+            return JSONResponse({"success": False, "error": "未找到SKU或识别码列，请检查调整明细表头"}, 400)
         adj_rows = []
         for r in range(2, ws_adj.max_row + 1):
-            code = ws_adj.cell(row=r, column=6).value
+            code = ws_adj.cell(row=r, column=col_idx["识别码"]).value
             if code is None: continue
             adj_rows.append({
                 "识别码": str(code).strip(),
-                "店铺": str(ws_adj.cell(row=r, column=7).value or "").strip(),
-                "SKU": str(ws_adj.cell(row=r, column=5).value or "").strip(),
-                "调整FNSKU": str(ws_adj.cell(row=r, column=12).value or "").strip(),
-                "调整量": ws_adj.cell(row=r, column=10).value,
-                "调整店铺": str(ws_adj.cell(row=r, column=11).value or "").strip(),
+                "店铺": str(ws_adj.cell(row=r, column=col_idx.get("店铺",0)).value or "").strip() if col_idx.get("店铺") else "",
+                "SKU": str(ws_adj.cell(row=r, column=col_idx["SKU"]).value or "").strip(),
+                "调整FNSKU": str(ws_adj.cell(row=r, column=col_idx.get("调整FNSKU",0)).value or "").strip(),
+                "调整量": ws_adj.cell(row=r, column=col_idx.get("调整量",0)).value if col_idx.get("调整量") else None,
+                "调整店铺": str(ws_adj.cell(row=r, column=col_idx.get("调整店铺",0)).value or "").strip(),
             })
         wb_adj.close(); tmp.unlink(missing_ok=True)
         if not adj_rows:
