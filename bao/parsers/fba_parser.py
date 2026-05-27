@@ -1,44 +1,9 @@
-"""FBA 原始装箱数据解析器
-
-解析亚马逊 FBA 货件导出 Excel 的 "packing" sheet，
-提取货件元信息和 SKU 装箱明细。
-"""
-
+"""FBA 原始装箱数据解析器（openpyxl 版，无 pandas 依赖）"""
 from pathlib import Path
-
-import pandas as pd
+import openpyxl
 
 
 class FBAParser:
-    """FBA 货件数据解析器
-
-    输入格式（packing sheet）:
-      Row 1-7: 元数据行（工作流程名称、货件编号、箱子数量等）
-      Row 9:   列标题
-      Row 10+: 数据行
-
-    输出字典结构:
-      {
-        "meta": {
-            "shipment_id": "FBA15LRB2LTZ",
-            "total_boxes": 45,
-            "sku_count": 9,
-            "item_count": 720,
-        },
-        "items": [
-            {
-                "msku": "MSTC09EUS01 Citronella",
-                "declared_qty": 270,
-                "box_count": 15,
-                "length": 50.2, "width": 45.7, "height": 33.4,
-                "weight": 14.5,
-                "box_range": "31~45",
-            },
-            ...
-        ]
-      }
-    """
-
     COLUMN_MAP = {
         "msku": ["MSKU"],
         "asin": ["ASIN"],
@@ -56,70 +21,60 @@ class FBAParser:
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"文件不存在: {file_path}")
-
-        df = pd.read_excel(file_path, sheet_name="packing", header=None, dtype=str)
-        if df.empty:
-            return {"meta": {}, "items": []}
-
-        meta = self._extract_meta(df)
-        header_row = self._find_header_row(df)
+        wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+        ws = wb["packing"] if "packing" in wb.sheetnames else wb.active
+        meta = self._extract_meta(ws)
+        header_row = self._find_header_row(ws)
         if header_row < 0:
+            wb.close()
             return {"meta": meta, "items": []}
-
-        col_map = self._build_column_map(df, header_row)
+        col_map = self._build_column_map(ws, header_row)
         items = []
-
-        for row_idx in range(header_row + 1, len(df)):
-            msku = self._cell(df, row_idx, col_map.get("msku"))
+        for row_idx in range(header_row + 1, ws.max_row + 1):
+            msku = self._cell(ws, row_idx, col_map.get("msku"))
             if not msku or msku.strip() == "":
                 continue
-
-            item = {
+            items.append({
                 "msku": msku.strip(),
-                "asin": self._cell(df, row_idx, col_map.get("asin")),
-                "declared_qty": self._as_float(df, row_idx, col_map.get("declared_qty")),
-                "boxed_qty": self._as_float(df, row_idx, col_map.get("boxed_qty")),
-                "box_count": self._as_int(df, row_idx, col_map.get("box_count")),
-                "length": self._as_float(df, row_idx, col_map.get("length")),
-                "width": self._as_float(df, row_idx, col_map.get("width")),
-                "height": self._as_float(df, row_idx, col_map.get("height")),
-                "weight": self._as_float(df, row_idx, col_map.get("weight")),
-                "box_range": self._cell(df, row_idx, col_map.get("box_range")),
-            }
-            items.append(item)
-
+                "asin": self._cell(ws, row_idx, col_map.get("asin")),
+                "declared_qty": self._as_float(ws, row_idx, col_map.get("declared_qty")),
+                "boxed_qty": self._as_float(ws, row_idx, col_map.get("boxed_qty")),
+                "box_count": self._as_int(ws, row_idx, col_map.get("box_count")),
+                "length": self._as_float(ws, row_idx, col_map.get("length")),
+                "width": self._as_float(ws, row_idx, col_map.get("width")),
+                "height": self._as_float(ws, row_idx, col_map.get("height")),
+                "weight": self._as_float(ws, row_idx, col_map.get("weight")),
+                "box_range": self._cell(ws, row_idx, col_map.get("box_range")),
+            })
+        wb.close()
         return {"meta": meta, "items": items}
 
-    def _extract_meta(self, df: pd.DataFrame) -> dict:
+    def _extract_meta(self, ws) -> dict:
         meta = {}
-        for row_idx in range(min(8, len(df))):
-            label = self._cell(df, row_idx, 0)
-            value = self._cell(df, row_idx, 1)
+        for row_idx in range(1, min(9, ws.max_row + 1)):
+            label = self._cell(ws, row_idx, 0)
+            value = self._cell(ws, row_idx, 1)
             if not label:
                 continue
-            label_lower = label.strip()
-            if "货件编号" in label_lower:
-                meta["shipment_id"] = value.strip()
-            elif "箱子数量" in label_lower:
-                meta["total_boxes"] = self._as_int(df, row_idx, 1)
-            elif "SKU 数量" in label_lower or "SKU数量" in label_lower:
-                meta["sku_count"] = self._as_int(df, row_idx, 1)
-            elif "商品数量" in label_lower:
-                meta["item_count"] = self._as_int(df, row_idx, 1)
+            lbl = label.strip()
+            if "货件编号" in lbl: meta["shipment_id"] = value.strip()
+            elif "箱子数量" in lbl: meta["total_boxes"] = self._as_int(ws, row_idx, 1)
+            elif "SKU 数量" in lbl or "SKU数量" in lbl: meta["sku_count"] = self._as_int(ws, row_idx, 1)
+            elif "商品数量" in lbl: meta["item_count"] = self._as_int(ws, row_idx, 1)
         return meta
 
-    def _find_header_row(self, df: pd.DataFrame) -> int:
-        for row_idx in range(min(20, len(df))):
-            for col_idx in range(min(20, len(df.columns))):
-                val = self._cell(df, row_idx, col_idx)
+    def _find_header_row(self, ws) -> int:
+        for row_idx in range(1, min(21, ws.max_row + 1)):
+            for col_idx in range(min(20, ws.max_column or 0)):
+                val = self._cell(ws, row_idx, col_idx)
                 if val and "MSKU" in val:
                     return row_idx
         return -1
 
-    def _build_column_map(self, df: pd.DataFrame, header_row: int) -> dict:
+    def _build_column_map(self, ws, header_row: int) -> dict:
         col_map = {}
-        for col_idx in range(min(30, len(df.columns))):
-            val = self._cell(df, header_row, col_idx)
+        for col_idx in range(min(30, ws.max_column or 0)):
+            val = self._cell(ws, header_row, col_idx)
             if not val:
                 continue
             for field, keywords in self.COLUMN_MAP.items():
@@ -130,33 +85,31 @@ class FBAParser:
         return col_map
 
     @staticmethod
-    def _cell(df: pd.DataFrame, row: int, col) -> str:
-        if col is None:
+    def _cell(ws, row: int, col) -> str:
+        if col is None or col < 0:
             return ""
         try:
-            val = df.iat[row, col]
-            if pd.isna(val):
-                return ""
-            return str(val)
-        except (IndexError, ValueError):
+            val = ws.cell(row=row + 1, column=col + 1).value
+            return "" if val is None else str(val)
+        except Exception:
             return ""
 
     @staticmethod
-    def _as_float(df: pd.DataFrame, row: int, col) -> float:
-        val = FBAParser._cell(df, row, col)
+    def _as_float(ws, row: int, col) -> float:
+        val = FBAParser._cell(ws, row, col)
         if not val:
             return 0.0
         try:
             return float(val)
-        except (ValueError, TypeError):
+        except Exception:
             return 0.0
 
     @staticmethod
-    def _as_int(df: pd.DataFrame, row: int, col) -> int:
-        val = FBAParser._cell(df, row, col)
+    def _as_int(ws, row: int, col) -> int:
+        val = FBAParser._cell(ws, row, col)
         if not val:
             return 0
         try:
             return int(float(val))
-        except (ValueError, TypeError):
+        except Exception:
             return 0
