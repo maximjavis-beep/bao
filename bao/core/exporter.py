@@ -8,6 +8,7 @@ from openpyxl.cell.cell import MergedCell
 from openpyxl.drawing.image import Image as XLImage
 from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
 from openpyxl.styles import Alignment, Font
+from openpyxl.utils.units import pixels_to_EMU
 
 _TEMPLATE_PATH = Path(__file__).parent.parent.parent / "templates" / "蜡烛-模版.xlsx"
 
@@ -22,6 +23,13 @@ DATA_START_ROW = 4
 YELLOW_FILL = openpyxl.styles.PatternFill(start_color="FFFFFF00", end_color="FFFFFF00", fill_type="solid")
 GRAY_FILL = openpyxl.styles.PatternFill(start_color="FFD8D8D8", end_color="FFD8D8D8", fill_type="solid")
 FIXED_COLS = ["B", "F", "G", "H", "I", "J", "K", "M", "N", "P", "Q", "T"]
+
+# T 列图片固定像素尺寸（继承模板中原始图片格式）
+T_IMG_W = 54
+T_IMG_H = 66
+# 模板图片在 T 列内的微调偏移（EMU），继承原始锚点
+T_IMG_COL_OFF = 140970
+T_IMG_ROW_OFF = 71755
 
 DECLARATION_NOTE = (
     "申报单价按照实际填写，一般建议不低于销售链接的30%（S列），\n"
@@ -44,7 +52,7 @@ class FBAExporter:
         ws = wb["下单模板"]
         rows = woven.get("rows", [])
 
-        # 保存模板中 T 列图片数据 + 尺寸
+        # 保存模板中 T 列图片数据
         t_img_bytes = None
         t_w, t_h = 0, 0
         for img in ws._images:
@@ -79,7 +87,7 @@ class FBAExporter:
         center = Alignment(horizontal="center", vertical="center", wrap_text=True)
         bf = Font(name="微软雅黑", size=10)
 
-        # 保留所有 temp 文件路径，save 后再清理
+        # 保存 temp 文件引用
         _temp_files = []
 
         # 数据行
@@ -102,21 +110,23 @@ class FBAExporter:
             self._set(ws, r, "W", rd.get("宽", 0), center, bf, YELLOW_FILL)
             self._set(ws, r, "X", rd.get("高", 0), center, bf, YELLOW_FILL)
 
-            # T 列图片：为每行创建副本
+            # T 列图片：OneCellAnchor + 固定像素尺寸
             if t_img_bytes:
                 tf = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
                 tf.write(t_img_bytes)
                 tf.close()
                 _temp_files.append(tf.name)
                 img = XLImage(tf.name)
-                img_w = max(t_w, 120)
-                img_h = max(t_h, 120)
-                img.width, img.height = img_w, img_h
-                from openpyxl.drawing.spreadsheet_drawing import TwoCellAnchor
-                anchor = TwoCellAnchor()
-                anchor._from = AnchorMarker(col=COL["T"] - 1, row=r - 1)
-                anchor.to = AnchorMarker(col=COL["T"], row=r)
-                img.anchor = anchor
+                img.width, img.height = T_IMG_W, T_IMG_H
+                marker = AnchorMarker(
+                    col=COL["T"] - 1, row=r - 1,
+                    colOff=T_IMG_COL_OFF, rowOff=T_IMG_ROW_OFF
+                )
+                from openpyxl.drawing.xdr import XDRPositiveSize2D
+                ext = XDRPositiveSize2D(
+                    cx=pixels_to_EMU(T_IMG_W), cy=pixels_to_EMU(T_IMG_H)
+                )
+                img.anchor = OneCellAnchor(_from=marker, ext=ext)
                 ws.add_image(img)
 
         # 标题样式
@@ -130,7 +140,6 @@ class FBAExporter:
         wb.save(output_path)
         wb.close()
 
-        # save 后清理 temp 文件
         for tf in _temp_files:
             try:
                 Path(tf).unlink()
