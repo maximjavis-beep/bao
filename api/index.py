@@ -18,6 +18,19 @@ UPLOAD_DIR = Path("/tmp/bao_uploads")
 _DOWNLOAD_SLOTS = {}
 
 def _read_html(path): fp = ROOT_DIR / "bao" / "web" / path; return fp.read_text(encoding="utf-8") if fp.exists() else "<h1>404</h1>"
+
+def _parse_tracking(path):
+    """解析货件追踪码文件 → {FBA编号: 货件追踪码}"""
+    wb = openpyxl.load_workbook(path, data_only=True)
+    ws = wb.active
+    result = {}
+    for r in range(2, ws.max_row + 1):
+        fba_id = str(ws.cell(row=r, column=1).value or "").strip()
+        code = str(ws.cell(row=r, column=2).value or "").strip()
+        if fba_id and code:
+            result[fba_id] = code
+    wb.close()
+    return result
 def _make_token(fp):
     if not fp.exists(): return ""
     b64 = base64.b64encode(fp.read_bytes()).decode()
@@ -40,7 +53,7 @@ async def api_parse(file: UploadFile = File(...)):
         return JSONResponse({"success": False, "error": str(e)}, 400)
 
 @app.post("/api/weave")
-async def api_weave(file: UploadFile = File(...), hs_code: str = Form(None), template: UploadFile = File(None)):
+async def api_weave(file: UploadFile = File(...), hs_code: str = Form(None), template: UploadFile = File(None), tracking: UploadFile = File(None)):
     try:
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         tmp = UPLOAD_DIR / f"fba_{uuid.uuid4().hex[:6]}.xlsx"
@@ -53,8 +66,13 @@ async def api_weave(file: UploadFile = File(...), hs_code: str = Form(None), tem
             tpl_tmp = UPLOAD_DIR / f"tpl_{uuid.uuid4().hex[:6]}.xlsx"
             tpl_tmp.write_bytes(await template.read())
             tpl_path = str(tpl_tmp)
+        tracking_map = None
+        if tracking:
+            tk_tmp = UPLOAD_DIR / f"track_{uuid.uuid4().hex[:6]}.xlsx"
+            tk_tmp.write_bytes(await tracking.read())
+            tracking_map = _parse_tracking(str(tk_tmp))
         out = UPLOAD_DIR / f"{meta.get('shipment_id','UNKNOWN')}-装箱单_{uuid.uuid4().hex[:6]}.xlsx"
-        FBAExporter(template_path=tpl_path).export(woven, str(out))
+        FBAExporter(template_path=tpl_path, tracking_map=tracking_map).export(woven, str(out))
         file_b64 = base64.b64encode(out.read_bytes()).decode()
         out.unlink(missing_ok=True)
         return JSONResponse({"success": True, "file_b64": file_b64, "summary": {
@@ -65,7 +83,7 @@ async def api_weave(file: UploadFile = File(...), hs_code: str = Form(None), tem
         return JSONResponse({"success": False, "error": str(e)}, 400)
 
 @app.post("/api/weave-batch")
-async def api_weave_batch(files: list[UploadFile] = File(...), hs_code: str = Form(None), template: UploadFile = File(None)):
+async def api_weave_batch(files: list[UploadFile] = File(...), hs_code: str = Form(None), template: UploadFile = File(None), tracking: UploadFile = File(None)):
     try:
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         tpl_path = None
@@ -73,7 +91,12 @@ async def api_weave_batch(files: list[UploadFile] = File(...), hs_code: str = Fo
             tpl_tmp = UPLOAD_DIR / f"tpl_{uuid.uuid4().hex[:6]}.xlsx"
             tpl_tmp.write_bytes(await template.read())
             tpl_path = str(tpl_tmp)
-        parser, exporter, results = FBAParser(), FBAExporter(template_path=tpl_path), []
+        tracking_map = None
+        if tracking:
+            tk_tmp = UPLOAD_DIR / f"track_{uuid.uuid4().hex[:6]}.xlsx"
+            tk_tmp.write_bytes(await tracking.read())
+            tracking_map = _parse_tracking(str(tk_tmp))
+        parser, exporter, results = FBAParser(), FBAExporter(template_path=tpl_path, tracking_map=tracking_map), []
         for f in files:
             try:
                 tmp = UPLOAD_DIR / f"fba_{uuid.uuid4().hex[:6]}.xlsx"
