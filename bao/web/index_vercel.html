@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="zh">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>bao — 出口报关文件编织助手</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -36,7 +36,7 @@ body{font:13px/1.5 -apple-system,system-ui,sans-serif;background:#f5f7fa;height:
 .file-badge .remove{cursor:pointer;color:#999;margin-left:4px}
 .btn-primary{background:#4a90d9;color:#fff}.btn-primary:hover{background:#357abd}.btn-primary:disabled{background:#ccc;cursor:not-allowed}
 .btn-batch{background:#8e44ad;color:#fff;margin-top:3px}.btn-batch:hover{background:#71368a}.btn-batch:disabled{background:#ccc;cursor:not-allowed}
-.btn-zip{background:#e67e22;color:#fff;text-decoration:none}.btn-zip:hover{background:#d35400}
+.btn-zip{background:#e67e22;color:#fff;text-decoration:none;display:inline-block;padding:6px 12px;font-size:12px;border-radius:4px}.btn-zip:hover{background:#d35400}
 .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
 .info-card{background:#f8faff;border-radius:4px;padding:8px 10px;text-align:center}
 .info-card .num{font-size:18px;font-weight:700;color:#4a90d9}
@@ -61,7 +61,7 @@ tr:hover td{background:#f8faff}
 </style>
 </head>
 <body>
-<div class="header"><h1>📦 bao</h1><span class="ver">v0.3.2</span></div>
+<div class="header"><h1>📦 bao</h1><span class="ver">v0.5.0</span></div>
 <div class="top-section">
 <div class="top-left">
 <div class="section-title">📋 调整明细 → 发货计划</div>
@@ -89,7 +89,7 @@ tr:hover td{background:#f8faff}
 <button class="btn btn-primary" id="gen-btn" disabled onclick="doGenerateSingle()">🧵 单件生成</button>
 <a class="btn btn-dl btn-download" id="dl-btn" style="display:none" href="#">⬇ 装箱单</a>
 <button class="btn btn-batch" id="gen-batch-btn" disabled onclick="doGenerateBatch()">📦 批量生成</button>
-<div class="batch-result" id="batch-result"></div>
+
 </div>
 <div class="panel panel-center" id="preview"><div class="empty"><div class="icon">📋</div>上传 FBA 货件 Excel 开始</div></div>
 <div class="panel panel-right" id="summary"><div class="section-title section-title-bao">📊 货件信息</div><div class="empty">等待上传…</div></div>
@@ -126,16 +126,38 @@ function handleFiles(i){state.files=Array.from(i.files);renderFileList();if(stat
 function renderFileList(){let h='';state.files.forEach((f,i)=>{h+='<div class="file-badge"><span class="idx">'+(i+1)+'</span><span class="name">'+esc(f.name)+'</span><span class="remove" onclick="removeFile('+i+')">✕</span></div>'});document.getElementById('file-list').innerHTML=h}
 function removeFile(i){state.files.splice(i,1);let dt=new DataTransfer();state.files.forEach(f=>dt.items.add(f));document.getElementById('file-input').files=dt.files;renderFileList();if(state.files.length===0)clearAll();else if(state.files.length===1)parseSingle(state.files[0])}
 function parseSingle(f){document.getElementById('preview').innerHTML='<div class="loading"><span class="spinner"></span>解析中…</div>';document.getElementById('gen-btn').disabled=true;document.getElementById('gen-batch-btn').disabled=true;document.getElementById('dl-btn').style.display='none';let fd=new FormData();fd.append('file',f);fetch('/api/parse',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{if(!d.success){toast(d.error,true);document.getElementById('preview').innerHTML='<div class="empty"><div class="icon">❌</div>'+d.error+'</div>';return}state.parsed=d;showPreview(d);showSummary(d);document.getElementById('gen-btn').disabled=false;document.getElementById('gen-batch-btn').disabled=false;toast('✓ '+d.item_count+' SKU')}).catch(function(e){toast('上传失败: '+e.message,true)})}
-function clearAll(){state={files:[],parsed:null,templateFile:state.templateFile};document.getElementById('file-list').innerHTML='';document.getElementById('file-input').value='';document.getElementById('gen-btn').disabled=true;document.getElementById('gen-batch-btn').disabled=true;document.getElementById('dl-btn').style.display='none';document.getElementById('batch-result').innerHTML='';document.getElementById('preview').innerHTML='<div class="empty"><div class="icon">📋</div>上传 FBA 货件 Excel 开始</div>';document.getElementById('summary').innerHTML='<div class="section-title section-title-bao">📊 货件信息</div><div class="empty">等待上传…</div>'}
+function clearAll(){state={files:[],parsed:null,templateFile:state.templateFile,trackingFile:state.trackingFile};document.getElementById('file-list').innerHTML='';document.getElementById('file-input').value='';document.getElementById('gen-btn').disabled=true;document.getElementById('gen-batch-btn').disabled=true;document.getElementById('dl-btn').style.display='none';clearBatch();document.getElementById('preview').innerHTML='<div class="empty"><div class="icon">📋</div>上传 FBA 货件 Excel 开始</div>';document.getElementById('summary').innerHTML='<div class="section-title section-title-bao">📊 货件信息</div><div class="empty">等待上传…</div>'}
 function showPreview(d){let h='<div class="section-title">📋 SKU 明细</div>';if(!d.items||d.items.length===0)h+='<div class="empty">无数据</div>';else{h+='<table><tr><th>MSKU</th><th>箱数</th><th>申报量</th><th>箱号</th><th>重量</th><th>尺寸</th></tr>';d.items.forEach(i=>{h+='<tr><td>'+esc(i.msku)+'</td><td>'+i.box_count+'</td><td>'+i.declared_qty+'</td><td>'+esc(i.box_range)+'</td><td>'+i.weight+'</td><td>'+i.length+'×'+i.width+'×'+i.height+'</td></tr>'});h+='</table>'}document.getElementById('preview').innerHTML=h}
 function showSummary(d){let m=d.meta||{},h='<div class="section-title section-title-bao">📊 货件信息</div><div class="info-grid">';h+='<div class="info-card"><div class="num">'+(m.total_boxes||'-')+'</div><div class="lbl">箱子数量</div></div>';h+='<div class="info-card"><div class="num">'+(d.item_count||'-')+'</div><div class="lbl">SKU 数</div></div>';h+='<div class="info-card"><div class="num">'+(m.item_count||'-')+'</div><div class="lbl">商品数量</div></div>';h+='</div>';if(m.shipment_id)h+='<div style="padding:6px;background:#f0f6ff;border-radius:4px"><span style="color:#888;font-size:11px">货件编号</span><br><b>'+esc(m.shipment_id)+'</b></div>';document.getElementById('summary').innerHTML=h}
-function doGenerateSingle(){if(state.files.length===0)return toast('请先上传',true);let btn=document.getElementById('gen-btn');btn.disabled=true;btn.textContent='⏳ 生成中…';let fd=new FormData();fd.append('file',state.files[0]);if(state.templateFile)fd.append('template',state.templateFile);if(state.trackingFile)fd.append('tracking',state.trackingFile);let hs=document.getElementById('hs-code').value.trim();if(hs)fd.append('hs_code',hs);fetch('/api/weave',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{btn.disabled=false;btn.textContent='🧵 单件生成';if(!d.success){toast(d.error,true);return}downloadB64(d.file_b64,'装箱单.xlsx');let dl=document.getElementById('dl-btn');dl.onclick=function(){downloadB64(d.file_b64,'装箱单.xlsx')};dl.href='javascript:void(0)';dl.style.display='block';dl.textContent='⬇ 重新下载';showResultSummary(d);showResultRows(d);toast('✓ 生成完成')}).catch(function(e){btn.disabled=false;btn.textContent='🧵 单件生成';toast(e.message,true)})}
-function doGenerateBatch(){if(state.files.length===0)return toast('请先上传',true);let fd=new FormData();state.files.forEach(f=>fd.append('files',f));if(state.templateFile)fd.append('template',state.templateFile);if(state.trackingFile)fd.append('tracking',state.trackingFile);let hs=document.getElementById('hs-code').value.trim();if(hs)fd.append('hs_code',hs);let btn=document.getElementById('gen-batch-btn');btn.disabled=true;btn.textContent='⏳ 批量中…';fetch('/api/weave-batch',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{btn.disabled=false;btn.textContent='📦 批量生成';if(!d.success){toast(d.error,true);return}showBatchResult(d);toast('✓ '+d.results.filter(r=>r.success).length+'/'+d.results.length+' 成功')}).catch(function(e){btn.disabled=false;btn.textContent='📦 批量生成';toast(e.message,true)})}
-function showBatchResult(d){let h='<div style="margin-top:6px">';if(d.zip_b64)h+='<a class="btn btn-zip" href="javascript:void(0)" onclick="downloadZipB64(\''+d.zip_b64+'\')" style="margin-bottom:6px;font-size:11px;padding:6px;display:block;text-align:center">📥 批量下载 ZIP</a>';d.results.forEach(r=>{if(r.success)h+='<div style="font-size:11px;padding:3px 0"><span class="ok">✓</span> '+esc(r.shipment_id)+' <a href="javascript:void(0)" onclick="downloadB64(\''+r.file_b64+'\',\''+esc(r.shipment_id)+'-装箱单.xlsx\')" style="color:#4a90d9;font-size:10px">下载</a></div>';else h+='<div style="font-size:11px;padding:3px 0"><span class="fail">✗</span> '+esc(r.filename)+' — '+esc(r.error)+'</div>'});h+='</div>';document.getElementById('batch-result').innerHTML=h;document.getElementById('summary').innerHTML='<div class="section-title section-title-bao">📊 批量生成</div><div class="info-grid"><div class="info-card"><div class="num">'+d.results.length+'</div><div class="lbl">文件数</div></div><div class="info-card"><div class="num" style="color:#27ae60">'+d.results.filter(r=>r.success).length+'</div><div class="lbl">成功</div></div></div>'}
+function doGenerateSingle(){if(state.files.length===0)return toast('请先上传',true);let btn=document.getElementById('gen-btn');btn.disabled=true;btn.textContent='⏳ 生成中…';let fd=new FormData();fd.append('file',state.files[0]);if(state.templateFile)fd.append('template',state.templateFile);if(state.trackingFile)fd.append('tracking',state.trackingFile);let hs=document.getElementById('hs-code').value.trim();if(hs)fd.append('hs_code',hs);fetch('/api/weave',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{btn.disabled=false;btn.textContent='🧵 单件生成';if(!d.success){toast(d.error,true);return}let dl=document.getElementById('dl-btn');dl.onclick=function(){downloadB64(d.file_b64,'装箱单.xlsx')};dl.href='javascript:void(0)';dl.style.display='block';dl.textContent='⬇ 重新下载';try{downloadB64(d.file_b64,'装箱单.xlsx')}catch(e){dl.textContent='⬇ 下载装箱单';toast('自动下载失败，请点击按钮下载',true)}showResultSummary(d);showResultRows(d);toast('✓ 生成完成')}).catch(function(e){btn.disabled=false;btn.textContent='🧵 单件生成';toast(e.message,true)})}
+function doGenerateBatch(){if(state.files.length===0)return toast('请先上传',true);let fd=new FormData();state.files.forEach(f=>fd.append('files',f));if(state.templateFile)fd.append('template',state.templateFile);if(state.trackingFile)fd.append('tracking',state.trackingFile);let hs=document.getElementById('hs-code').value.trim();if(hs)fd.append('hs_code',hs);let btn=document.getElementById('gen-batch-btn');btn.disabled=true;btn.textContent='⏳ 批量中…';fetch('/api/weave-batch',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{btn.disabled=false;btn.textContent='📦 批量生成';if(!d.success){toast(d.error,true);return}showBatchResult(d);toast('v0.5.0 批量OK: '+d.results.filter(function(r){return r.success}).length+'/'+d.results.length)}).catch(function(e){btn.disabled=false;btn.textContent='📦 批量生成';toast(e.message,true)})}
+window._batchData=null;
+function showBatchResult(d){
+  window._batchData=d;
+  var okN=d.results.filter(function(r){return r.success}).length;
+  var h='<div class="section-title section-title-bao">📊 批量生成 ('+okN+'/'+d.results.length+')</div>';
+  if(d.zip_b64){
+    h+='<a class="btn btn-zip" href="javascript:void(0)" id="batch-zip-btn" style="margin:4px 0;display:inline-block">📥 批量下载 ZIP</a>';
+  }
+  h+='<div style="margin-top:4px;max-height:300px;overflow-y:auto">';
+  d.results.forEach(function(r,i){
+    if(r.success) h+='<div style="font-size:11px;padding:2px 0"><span class="ok">✓</span> '+esc(r.shipment_id)+' <a href="javascript:void(0)" class="batch-dl-link" data-idx="'+i+'" style="color:#4a90d9;font-size:10px">下载</a></div>';
+    else h+='<div style="font-size:11px;padding:2px 0"><span class="fail">✗</span> '+esc(r.filename)+'</div>'
+  });
+  h+='</div>';
+  document.getElementById('summary').innerHTML=h;
+  var zb=document.getElementById('batch-zip-btn');
+  if(zb)zb.onclick=function(e){e.preventDefault();downloadZipB64(d.zip_b64)};
+  document.querySelectorAll('.batch-dl-link').forEach(function(a){
+    var idx=parseInt(a.getAttribute('data-idx'));
+    a.onclick=function(e){e.preventDefault();var r=window._batchData.results[idx];if(r&&r.file_b64)downloadB64(r.file_b64,r.shipment_id+'-装箱单.xlsx')}
+  })
+}
+function clearBatch(){window._batchData=null}
 function showResultSummary(d){let s=d.summary||{},h='<div class="section-title section-title-bao">📊 生成结果</div><div class="info-grid">';h+='<div class="info-card"><div class="num">'+(s.total_boxes||'-')+'</div><div class="lbl">总箱数</div></div>';h+='<div class="info-card"><div class="num">'+(s.total_weight||'-')+'</div><div class="lbl">总重量 kg</div></div>';h+='<div class="info-card"><div class="num">'+(s.total_cbm||'-')+'</div><div class="lbl">总体积 CBM</div></div>';h+='</div>';if(s.shipment_id)h+='<div style="padding:6px;background:#eafaf1;border-radius:4px;font-size:11px;color:#666">Shipment ID: <b>'+esc(s.shipment_id)+'</b></div>';document.getElementById('summary').innerHTML=h}
 function showResultRows(d){let rows=d.rows||[],h='<div class="section-title">📋 装箱单明细</div><table><tr><th>箱号段</th><th>件数</th><th>SKU</th><th>HS</th><th>数量</th><th>重量</th><th>尺寸</th></tr>';rows.forEach(r=>{h+='<tr><td>'+esc(r['箱号段'])+'</td><td>'+r['总件数']+'</td><td>'+esc(r['SKU'])+'</td><td>'+esc(r['海关编码'])+'</td><td>'+r['总数量']+'</td><td>'+r['单箱重量']+'</td><td>'+r['长']+'×'+r['宽']+'×'+r['高']+'</td></tr>'});h+='</table>';document.getElementById('preview').innerHTML=h}
 function downloadB64(b64,filename){var raw=atob(b64),arr=new Uint8Array(raw.length);for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);var blob=new Blob([arr],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),url=URL.createObjectURL(blob);var isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent);if(isIOS){window.location.href=url}else{var a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();document.body.removeChild(a)}setTimeout(function(){URL.revokeObjectURL(url)},60000)}
-function downloadZipB64(b64){let raw=atob(b64),arr=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);let blob=new Blob([arr],{type:'application/zip'}),url=URL.createObjectURL(blob);let a=document.createElement('a');a.href=url;a.download='装箱单_批量.zip';a.click();URL.revokeObjectURL(url)}
+function downloadZipB64(b64){try{let raw=atob(b64),arr=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);let blob=new Blob([arr],{type:'application/zip'}),url=URL.createObjectURL(blob);var isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent);if(isIOS){window.location.href=url;return}let a=document.createElement('a');a.href=url;a.download='装箱单_批量.zip';document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(url)},60000)}catch(e){alert('ZIP下载失败: '+e.message+'\n\nb64长度:'+(b64?b64.length:'null'));toast('下载失败: '+e.message,true)}}
 </script>
 </body>
 </html>

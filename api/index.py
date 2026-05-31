@@ -115,26 +115,33 @@ async def api_weave_batch(files: list[UploadFile] = File(...), hs_code: str = Fo
             except Exception as e:
                 results.append({"filename": f.filename or "未知", "success": False, "error": str(e)})
         zip_b64 = ""
+        zip_error = ""
         ok = [r for r in results if r.get("success")]
         if ok:
             try:
-                bid = uuid.uuid4().hex[:6]; td = UPLOAD_DIR / f"batch_{bid}"; td.mkdir(parents=True, exist_ok=True)
+                bid = uuid.uuid4().hex[:6]
+                td = UPLOAD_DIR / f"batch_{bid}"
+                td.mkdir(parents=True, exist_ok=True)
                 for r in ok:
                     fb = r.get("file_b64","")
-                    if fb: (td / f"{r['shipment_id']}.xlsx").write_bytes(base64.b64decode(fb))
+                    if fb:
+                        (td / f"{r['shipment_id']}.xlsx").write_bytes(base64.b64decode(fb))
+                # 直接用 Python zipfile，跳过 subprocess（Vercel 不保证有 zip 命令）
                 zd = str(UPLOAD_DIR / f"batch_{bid}.zip")
-                try:
-                    import subprocess as sp
-                    sp.run(["zip","-j",zd]+sorted([fl.name for fl in td.iterdir()]), cwd=str(td), check=True, capture_output=True, timeout=30)
-                except (sp.CalledProcessError, FileNotFoundError):
-                    with zipfile.ZipFile(zd,"w") as zf:
-                        for fl in sorted(td.iterdir()): zf.write(str(fl), fl.name)
+                zf = zipfile.ZipFile(zd, "w", zipfile.ZIP_DEFLATED)
+                for fl in sorted(td.iterdir()):
+                    zf.write(str(fl), fl.name)
+                zf.close()
                 zip_b64 = base64.b64encode(Path(zd).read_bytes()).decode()
-            except Exception:
-                pass
+            except Exception as e:
+                zip_error = str(e)[:200]
             finally:
-                shutil.rmtree(td, ignore_errors=True); Path(zd).unlink(missing_ok=True)
-        return JSONResponse({"success": True, "results": results, "zip_b64": zip_b64})
+                try:
+                    shutil.rmtree(td, ignore_errors=True)
+                    Path(zd).unlink(missing_ok=True)
+                except Exception:
+                    pass
+        return JSONResponse({"success": True, "results": results, "zip_b64": zip_b64, "zip_error": zip_error, "result_count": len(results)})
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, 400)
 
