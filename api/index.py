@@ -40,7 +40,7 @@ async def api_parse(file: UploadFile = File(...)):
         return JSONResponse({"success": False, "error": str(e)}, 400)
 
 @app.post("/api/weave")
-async def api_weave(file: UploadFile = File(...), hs_code: str = Form(None)):
+async def api_weave(file: UploadFile = File(...), hs_code: str = Form(None), template: UploadFile = File(None)):
     try:
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         tmp = UPLOAD_DIR / f"fba_{uuid.uuid4().hex[:6]}.xlsx"
@@ -48,8 +48,13 @@ async def api_weave(file: UploadFile = File(...), hs_code: str = Form(None)):
         data = FBAParser().parse(str(tmp)); tmp.unlink(missing_ok=True)
         meta = data.get("meta", {})
         woven = weave_fba(data, hs_code_override=hs_code or None)
+        tpl_path = None
+        if template:
+            tpl_tmp = UPLOAD_DIR / f"tpl_{uuid.uuid4().hex[:6]}.xlsx"
+            tpl_tmp.write_bytes(await template.read())
+            tpl_path = str(tpl_tmp)
         out = UPLOAD_DIR / f"{meta.get('shipment_id','UNKNOWN')}-装箱单_{uuid.uuid4().hex[:6]}.xlsx"
-        FBAExporter().export(woven, str(out))
+        FBAExporter(template_path=tpl_path).export(woven, str(out))
         file_b64 = base64.b64encode(out.read_bytes()).decode()
         out.unlink(missing_ok=True)
         return JSONResponse({"success": True, "file_b64": file_b64, "summary": {
@@ -60,10 +65,15 @@ async def api_weave(file: UploadFile = File(...), hs_code: str = Form(None)):
         return JSONResponse({"success": False, "error": str(e)}, 400)
 
 @app.post("/api/weave-batch")
-async def api_weave_batch(files: list[UploadFile] = File(...), hs_code: str = Form(None)):
+async def api_weave_batch(files: list[UploadFile] = File(...), hs_code: str = Form(None), template: UploadFile = File(None)):
     try:
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        parser, exporter, results = FBAParser(), FBAExporter(), []
+        tpl_path = None
+        if template:
+            tpl_tmp = UPLOAD_DIR / f"tpl_{uuid.uuid4().hex[:6]}.xlsx"
+            tpl_tmp.write_bytes(await template.read())
+            tpl_path = str(tpl_tmp)
+        parser, exporter, results = FBAParser(), FBAExporter(template_path=tpl_path), []
         for f in files:
             try:
                 tmp = UPLOAD_DIR / f"fba_{uuid.uuid4().hex[:6]}.xlsx"
