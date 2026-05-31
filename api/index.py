@@ -129,12 +129,16 @@ async def api_weave_batch(files: list[UploadFile] = File(...), hs_code: str = Fo
                 except (sp.CalledProcessError, FileNotFoundError):
                     with zipfile.ZipFile(zd,"w") as zf:
                         for fl in sorted(td.iterdir()): zf.write(str(fl), fl.name)
-                zip_b64 = base64.b64encode(Path(zd).read_bytes()).decode()
-            except Exception:
+                zip_data = Path(zd).read_bytes()
+                zip_b64 = base64.b64encode(zip_data).decode()
+            except Exception as e:
+                import logging
+                logging.getLogger("bao").warning(f"ZIP failed: {e}")
                 pass
             finally:
                 shutil.rmtree(td, ignore_errors=True); Path(zd).unlink(missing_ok=True)
-        return JSONResponse({"success": True, "results": results, "zip_b64": zip_b64})
+        zip_size = len(zip_b64) if zip_b64 else 0
+        return JSONResponse({"success": True, "results": results, "zip_b64": zip_b64, "zip_size": zip_size, "result_count": len(results)})
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, 400)
 
