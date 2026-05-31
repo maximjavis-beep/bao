@@ -91,6 +91,20 @@ class BaoHandler(BaseHTTPRequestHandler):
         fp.write_bytes(base64.b64decode(b64))
         return str(fp)
 
+    @staticmethod
+    def _parse_tracking(path):
+        """解析货件追踪码文件 → {FBA编号: 货件追踪码}"""
+        wb = openpyxl.load_workbook(path, data_only=True)
+        ws = wb.active
+        result = {}
+        for r in range(2, ws.max_row + 1):
+            fba_id = str(ws.cell(row=r, column=1).value or "").strip()
+            code = str(ws.cell(row=r, column=2).value or "").strip()
+            if fba_id and code:
+                result[fba_id] = code
+        wb.close()
+        return result
+
     def _handle_parse(self):
         """解析上传的 FBA 货件文件，返回预览数据"""
         try:
@@ -126,6 +140,7 @@ class BaoHandler(BaseHTTPRequestHandler):
             b64 = body.get("file", "")
             hs_code = body.get("hs_code", None)
             tpl_b64 = body.get("template", None)
+            track_b64 = body.get("tracking", None)
 
             if not b64:
                 self._json({"success": False, "error": "未提供文件"}, 400)
@@ -135,6 +150,9 @@ class BaoHandler(BaseHTTPRequestHandler):
             tpl_path = None
             if tpl_b64:
                 tpl_path = self._save(tpl_b64, "tpl")
+            tracking_map = None
+            if track_b64:
+                tracking_map = self._parse_tracking(self._save(track_b64, "track"))
 
             data = parser.parse(path)
             meta = data.get("meta", {})
@@ -144,7 +162,7 @@ class BaoHandler(BaseHTTPRequestHandler):
 
             fname = f"{sid}-装箱单_{uuid.uuid4().hex[:6]}.xlsx"
             out = UPLOAD_DIR / fname
-            exporter = FBAExporter(template_path=tpl_path)
+            exporter = FBAExporter(template_path=tpl_path, tracking_map=tracking_map)
             exporter.export(woven, str(out))
 
             DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -173,14 +191,18 @@ class BaoHandler(BaseHTTPRequestHandler):
             files = body.get("files", [])
             hs_code = body.get("hs_code", None)
             tpl_b64 = body.get("template", None)
+            track_b64 = body.get("tracking", None)
             if not files:
                 self._json({"success": False, "error": "未提供文件"}, 400)
                 return
             tpl_path = None
             if tpl_b64:
                 tpl_path = self._save(tpl_b64, "tpl")
+            tracking_map = None
+            if track_b64:
+                tracking_map = self._parse_tracking(self._save(track_b64, "track"))
             parser = FBAParser()
-            exporter = FBAExporter(template_path=tpl_path)
+            exporter = FBAExporter(template_path=tpl_path, tracking_map=tracking_map)
             DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
             UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
             results = []

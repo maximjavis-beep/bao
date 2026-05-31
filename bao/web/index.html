@@ -117,6 +117,13 @@ tr:hover td{background:#f8faff}
     </label>
     <div class="plan-info" id="tpl-file-info"></div>
 
+    <label class="upload-zone" id="track-drop-zone" style="border-color:#e67e22;margin-top:4px">
+      <input type="file" id="track-file-input" accept=".xlsx" onchange="handleTrackFile(this)">
+      <div class="icon">🔗</div>
+      <div class="text">可选：上传货件追踪码</div>
+    </label>
+    <div class="plan-info" id="track-file-info"></div>
+
     <div class="hs-row">
       <label>HS编码：</label>
       <input type="text" id="hs-code" placeholder="自动匹配（蜡烛:3406000090）">
@@ -138,7 +145,7 @@ tr:hover td{background:#f8faff}
 <div class="toast" id="toast"></div>
 
 <script>
-let state = { files: [], parsed: null, woven: null, batchResult: null, planFile: null, adjPlanFile: null, templateFile: null };;
+let state = { files: [], parsed: null, woven: null, batchResult: null, planFile: null, adjPlanFile: null, templateFile: null, trackingFile: null };
 let toastTimer;
 
 // ====== 上屏：调整明细 → 发货计划 ======
@@ -224,6 +231,12 @@ function handleTplFile(input) {
   document.getElementById('tpl-file-info').textContent = '✓ ' + esc(state.templateFile.name);
 }
 
+function handleTrackFile(input) {
+  if (input.files.length === 0) return;
+  state.trackingFile = input.files[0];
+  document.getElementById('track-file-info').textContent = '✓ ' + esc(state.trackingFile.name);
+}
+
 function toast(msg, isError) {
   let t = document.getElementById('toast');
   t.textContent = msg;
@@ -238,6 +251,13 @@ function readTplThen(fn) {
   let r = new FileReader();
   r.onload = () => { fn(r.result.split(',')[1]); };
   r.readAsDataURL(state.templateFile);
+}
+
+function readTrackingThen(fn) {
+  if (!state.trackingFile) { fn(); return; }
+  let r = new FileReader();
+  r.onload = () => { fn(r.result.split(',')[1]); };
+  r.readAsDataURL(state.trackingFile);
 }
 
 function readFile(file, cb) {
@@ -370,7 +390,10 @@ function doGenerateSingle() {
     }
     readTplThen(function(tpl_b64) {
       if (tpl_b64) body.template = tpl_b64;
-      doFetch();
+      readTrackingThen(function(track_b64) {
+        if (track_b64) body.tracking = track_b64;
+        doFetch();
+      });
     });
   });
 }
@@ -402,7 +425,10 @@ function doBatchCall(fileData, btn) {
     toast('✓ 批量完成 — ' + d.results.filter(r=>r.success).length + '/' + d.results.length + ' 成功');
   }).catch(e => { btn.disabled = false; btn.textContent = '📦 批量生成'; toast('生成失败', true); });
   }
-  readTplThen(doFetch);
+  readTplThen(function(tplResult) {
+    tpl = tplResult;
+    readTrackingThen(doFetch);
+  });
 }
 
 function showBatchResult(d) {

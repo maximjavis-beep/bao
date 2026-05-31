@@ -42,8 +42,9 @@ GRAY_FILL = openpyxl.styles.PatternFill(start_color="FFD8D8D8", end_color="FFD8D
 
 
 class FBAExporter:
-    def __init__(self, template_path: str = None):
+    def __init__(self, template_path: str = None, tracking_map: dict = None):
         self._template_path = Path(template_path) if template_path else _DEFAULT_TEMPLATE
+        self._tracking_map = tracking_map or {}
         if not self._template_path.exists():
             raise FileNotFoundError(f"模板不存在: {self._template_path}")
 
@@ -166,6 +167,13 @@ class FBAExporter:
                 val = tmpl_cat.get(fld) if tmpl_cat else None
                 if val is not None:
                     self._set_col(ws, r, c, str(val), center, bf, GRAY_FILL)
+
+            # 货件追踪码 lookup（Reference ID）
+            if col("reference_id") > 0 and self._tracking_map:
+                sid = woven.get("shipment_id", "")
+                track_code = self._tracking_map.get(sid, "")
+                if track_code:
+                    self._set_col(ws, r, col("reference_id"), track_code, center, bf, YELLOW_FILL)
 
             yw = {
                 "shipment_id": woven.get("shipment_id", ""),
