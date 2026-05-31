@@ -68,11 +68,6 @@ def weave_fba(data: dict, hs_code_override: Optional[str] = None) -> dict:
     shipment_id = meta.get("shipment_id", "")
     total_boxes = meta.get("total_boxes", 0)
 
-    hs_data = load_hs_map()
-    by_keyword = hs_data["by_keyword"]
-    by_import = hs_data["by_import"]
-    by_hs = hs_data["by_hs"]
-    fields = hs_data["fields"]
     rows = []
     total_weight = 0.0
     total_cbm = 0.0
@@ -87,24 +82,9 @@ def weave_fba(data: dict, hs_code_override: Optional[str] = None) -> dict:
         height = item.get("height", 0)
         declared_qty = int(item.get("declared_qty", 0))
 
-        # HS 编码匹配：优先进口海关编码 → HS CODE → 关键词
+        # HS 编码：直接使用箱单中的进口海关编码
         input_hs = item.get("input_hs_code", "")
-        hs_code = hs_code_override or _DEFAULT_HS_CODE
-
-        if not hs_code_override:
-            if input_hs and input_hs in by_import:
-                hs_code = by_import[input_hs]
-            elif input_hs and input_hs in by_hs:
-                hs_code = by_hs.get(input_hs, hs_code)
-            else:
-                msku = item.get("msku", "")
-                for keyword, code in by_keyword.items():
-                    if keyword in msku:
-                        hs_code = code
-                        break
-
-        # 获取 HS 表完整字段信息（供 exporter 品类映射用）
-        hs_fields = fields.get(hs_code, {})
+        hs_code = hs_code_override or input_hs or _DEFAULT_HS_CODE
 
         rows.append({
             "箱号段": box_range,
@@ -114,11 +94,6 @@ def weave_fba(data: dict, hs_code_override: Optional[str] = None) -> dict:
             "标题": item.get("title", ""),
             "进口海关编码": item.get("input_hs_code"),
             "海关编码": hs_code,
-            "英文品名": hs_fields.get("英文品名", ""),
-            "中文品名": hs_fields.get("中文品名", ""),
-            "品牌": hs_fields.get("备注", ""),
-            "材质": hs_fields.get("材质", ""),
-            "用途": hs_fields.get("用途", ""),
             "总数量": declared_qty,
             "单箱重量": weight,
             "长": length,

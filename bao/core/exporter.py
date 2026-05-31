@@ -121,7 +121,31 @@ class FBAExporter:
             except Exception:
                 pass
 
-        # ── HS 品类映射 + DISPIMG 关联 ──────────────────
+        # ── HS 品类映射 + DISPIMG 关联（仅需从模板复制的字段）───
+        # 从模板复制的字段：海关编码/是否带电/型号/单位/每套个数
+        _GREY_COPY_FIELDS = {"battery", "model", "unit", "per_set"}
+        # 从模板第一个数据行提取默认值（无需按 HS 匹配）
+        _grey_defaults = {}
+        for fld in _GREY_COPY_FIELDS:
+            c = col(fld)
+            if c > 0:
+                v = ws.cell(row=data_start, column=c).value
+                if v is not None:
+                    _grey_defaults[fld] = str(v)
+        # 海关编码也从模板第一行复制
+        if col("hs_code") > 0:
+            v = ws.cell(row=data_start, column=col("hs_code")).value
+            if v is not None:
+                _grey_defaults["hs_code"] = str(v).strip()
+        # DISPIMG 取模板第一个图片（不按 HS 匹配）
+        _first_dispimg = None
+        for drow, (dname, _ib, _w, _h) in dispimg_info.items():
+            if drow == data_start:
+                _first_dispimg = dname
+                break
+        if _first_dispimg is None and dispimg_info:
+            _first_dispimg = list(dispimg_info.values())[0][0]
+
         template_categories = {}
         if col("hs_code") > 0:
             for sr in range(data_start, min(data_start + 10, ws.max_row + 1)):
@@ -132,7 +156,7 @@ class FBAExporter:
                 if hs_key in template_categories:
                     continue
                 cat_data = {}
-                for fld in grey_fields:
+                for fld in _GREY_COPY_FIELDS:
                     c = col(fld)
                     if c > 0:
                         v = ws.cell(row=sr, column=c).value
@@ -142,7 +166,8 @@ class FBAExporter:
                     if drow == sr:
                         cat_data["_dispimg"] = dname
                         break
-                template_categories[hs_key] = cat_data
+                if cat_data:
+                    template_categories[hs_key] = cat_data
 
         # ── 清除数据行 ─────────────────────────────────
         max_c = col_map.get("_max_col", 24)
@@ -192,11 +217,12 @@ class FBAExporter:
             row_hs = str(rd.get("进口海关编码") or rd.get("海关编码", "")).strip()
             tmpl_cat = template_categories.get(row_hs) if row_hs else None
 
-            for fld in grey_fields:
+            # 从模板复制特定灰色字段（是否带电/型号/单位/每套个数）
+            for fld in _GREY_COPY_FIELDS:
                 c = col(fld)
                 if c <= 0:
                     continue
-                val = tmpl_cat.get(fld) if tmpl_cat else None
+                val = _grey_defaults.get(fld)
                 if val is not None:
                     self._set_col(ws, r, c, str(val), center, bf, GRAY_FILL)
 
@@ -227,7 +253,7 @@ class FBAExporter:
                 "cn_name":     rd.get("中文品名", ""),
                 "material":    rd.get("材质", ""),
                 "usage":       rd.get("用途", ""),
-                "hs_code":     rd.get("海关编码", ""),
+                "hs_code":     _grey_defaults.get("hs_code", rd.get("海关编码", "")),
             }
             for fld, val in yw.items():
                 if fld in grey_fields or val is None:
@@ -242,9 +268,13 @@ class FBAExporter:
 
             # 图片：DISPIMG 公式 or TwoCellAnchor
             if col("image") > 0:
+                disp_name = None
                 if tmpl_cat and "_dispimg" in tmpl_cat:
-                    ws.cell(row=r, column=col("image")).value = (
-                        f'=_xlfn.DISPIMG("{tmpl_cat["_dispimg"]}",1)')
+                    disp_name = tmpl_cat["_dispimg"]
+                elif _first_dispimg:
+                    disp_name = _first_dispimg
+                if disp_name:
+                    ws.cell(row=r, column=col("image")).value = f'=_xlfn.DISPIMG("{disp_name}",1)'
                 elif t_img_bytes:
                     tf = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
                     tf.write(t_img_bytes)

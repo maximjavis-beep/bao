@@ -11,7 +11,7 @@ import openpyxl
 from openpyxl.styles import PatternFill
 from bao.parsers.fba_parser import FBAParser
 
-app = FastAPI(title="bao", version="0.2.0")
+app = FastAPI(title="bao", version="0.5.2")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 ROOT_DIR = Path(__file__).parent.parent
 UPLOAD_DIR = Path("/tmp/bao_uploads")
