@@ -1,6 +1,6 @@
 # bao — 出口报关文件编织助手
 
-从 FBA 货件 Excel 一键生成清关装箱单，同时支持调整明细自动填充发货计划。双面板 Web 界面 + CLI + Vercel 线上部署。
+从 FBA 货件 Excel 一键生成清关装箱单，支持调整明细自动填充发货计划、货件追踪码匹配、自定义模板上传、DISPIMG 嵌入图片。双面板 Web 界面 + CLI + Vercel 线上部署。
 
 🌐 **线上版**：https://bao-sepia-delta.vercel.app/
 
@@ -16,29 +16,33 @@ source venv/bin/activate
 bash restart.sh
 ```
 
-浏览器打开 **http://127.0.0.1:7777**（或 `python start_web.py 9999` 指定端口）
+浏览器打开 **http://127.0.0.1:8888**（或 `python start_web.py 9999` 指定端口）
 
 ### Vercel 线上部署
 
 项目通过 GitHub + Vercel 自动部署，每次 push 自动上线。
 
+---
+
 ## 使用流程
 
 ### Web 面板（上下分屏）
 
-**上屏 — 调整明细 → 发货计划**
+#### 上屏 — 调整明细 → 发货计划
 
-1. 上传调整明细 Excel（含识别码、店铺、SKU、调整FNSKU、调整量等）
-2. 点击「🔀 生成发货计划」
-3. 下载填充好的发货计划 Excel（新增行黄色标注）
+1. 上传「调整明细」Excel + 「发货计划」Excel
+2. 点击「🔀 生成调整后发货计划」
+3. 按四步规则（店铺筛选 → 识别码+FNSKU 匹配 → 数量判断 → 清理黄色行）自动处理
+4. 下载结果（匹配组数 / 删除行数统计）
 
-**下屏 — FBA 装箱单生成**
+#### 下屏 — FBA 装箱单生成
 
 1. 上传 FBA 货件 Excel（packing sheet）— 支持多选拖拽
-2. 自动解析并预览 SKU 明细和货件信息
-3. （可选）填写 HS 编码覆盖
-4. 点击「🧵 单件生成」或「📦 批量生成」
-5. 单件直接下载，批量打包 ZIP
+2. （可选）上传自定义模板 — 不限于蜡烛，自动适配表头
+3. （可选）上传货件追踪码 — 自动匹配 Reference ID
+4. 自动解析并预览 SKU 明细和货件信息
+5. 点击「🧵 单件生成」或「📦 批量生成」
+6. 单件直接下载，批量打包 ZIP
 
 ### CLI
 
@@ -46,6 +50,8 @@ bash restart.sh
 bao build from-fba -i FBA货件.xlsx -o 装箱单.xlsx
 bao build preview -i FBA货件.xlsx
 ```
+
+---
 
 ## 自动规则
 
@@ -62,7 +68,7 @@ bao build preview -i FBA货件.xlsx
 
 ### 品类匹配
 
-通过 `data/hs_code.xlsx` 查表获取各品类的英文品名、中文品名、材质、用途等信息。支持上传自定义模板，表头自动推断，不限品类。
+通过 `data/hs_code.xlsx` 查表获取各品类的英文品名、中文品名、材质、用途等信息。支持上传自定义模板，表头自动推断（扫描前 30 行，匹配 23 个关键词字段），不限品类。
 
 ### 装箱单生成规则
 
@@ -70,54 +76,55 @@ bao build preview -i FBA货件.xlsx
 |------|------|
 | 箱号段标准化 | `~` / `～` → `-`，单整数如 `16` 自动补全为 `16-16` |
 | ASIN 自动带入 | packing sheet 的 ASIN 列自动填入 |
-| 海关编码 | 优先使用输入文件中的"进口海关编码"列，其次按 HS 表关键词匹配，最后使用默认值 |
+| 海关编码 | 优先使用输入文件中的"进口海关编码"列，其次按 HS 表关键词匹配 |
+| Sheet 自动检测 | 优先匹配「下单模板」，回退到首个 sheet |
+| 自由列位置 | 不依赖固定 ABC 列，按表头关键词自动定位 |
 
-### 图片处理 — DISPIMG（WPS 嵌入）支持
-
-用户上传模板使用什么图片格式，输出就用什么格式：
+### 图片处理
 
 | 模板图片类型 | 检测方式 | 输出方式 |
 |------------|----------|---------|
-| openpyxl 嵌入图 (PNG) | `ws._images` 非空 | `TwoCellAnchor` 填充单元格 |
-| WPS DISPIMG 公式 | `xl/cellimages.xml` 存在 | `=_xlfn.DISPIMG(...)` 公式 + cellimages 完整注入 |
+| openpyxl 嵌入图 (PNG) | `ws._images` 非空 | `TwoCellAnchor` 填满单元格 + `editAs="oneCell"` 自适应 |
+| WPS DISPIMG 公式 | `xl/cellimages.xml` 存在 | `=_xlfn.DISPIMG("ID",1)` 公式 + cellimages 四组件注入 |
 
-> **DISPIMG 注入关键**：输出文件必须同时包含 4 个组件才能被 WPS 正确识别：
-> 1. `[Content_Types].xml` 中注册 cellimages 类型
-> 2. `xl/_rels/workbook.xml.rels` 中注册 WPS cellImage 关系
+> **DISPIMG 注入四组件**：
+> 1. `[Content_Types].xml` — 注册 cellimages 类型
+> 2. `xl/_rels/workbook.xml.rels` — WPS cellImage 关系
 > 3. `xl/cellimages.xml` + `xl/_rels/cellimages.xml.rels`
-> 4. 工作表单元格中的 `=_xlfn.DISPIMG("ID",1)` 公式
+> 4. 单元格 `=_xlfn.DISPIMG("ID",1)` 公式
 >
-> 缺少任一项都会导致图片显示为 `#NAME?` 或空白。
+> 缺少任一项 → `#NAME?` 或空白。
+
+### 货件追踪码匹配
+
+上传「FBA对应货件追踪码」文件（2 列：FBA编号 / 货件追踪码），生成时自动将追踪码填入模板的 Reference ID 列。
+
+---
 
 ## 调整明细 → 发货计划 映射规则
 
-上传调整明细后，自动按以下规则填充发货计划模板：
+四步处理流程（适用调整明细与发货计划表格）：
+
+| 步骤 | 规则 |
+|------|------|
+| 13 | 筛选同店铺 — 调整店铺 = 计划表店铺 |
+| 14 | 识别码 + FNSKU 匹配 — 在已有计划行中匹配 |
+| 15 | 数量判断 — 1:1 / 多:1 / 差异（仅标记，不覆盖） |
+| 16 | 清理 — 删除已处理的黄色新增行，补全库存箱数 |
 
 | 发货计划列 | 数据来源 | 规则 |
 |-----------|------|------|
 | C 识别码 | 调整明细 识别码 | 同名同义 |
-| D 店铺-国家 | 调整明细 店铺 | 异名同义 |
 | E 国家 | D 列 `-` 后代码 | 推导：MSCandle-JP → JP |
 | F SKU | 调整明细 SKU | 同名同义 |
 | G FNSKU | 调整明细 调整FNSKU | 调整后目标值 |
 | J 计划发货量 | 调整明细 调整量 | 异名同义 |
 | K 库存数 | 调整明细 调整量 | 异名同义 |
-| P 店铺 | 调整明细 调整店铺 | 调整后归属 |
+| Q 调拨单号/调拨量 | 调整明细 调整单号 | 多个用逗号拼接 |
 
-> 无法对应的列（发货批次号、MSKU、单箱数量等）留空，新增行整行黄色标注。
+> 无法对应的列留空，新增行整行黄色标注。
 
-## 安全机制（线上版）
-
-| 措施 | 说明 |
-|------|------|
-| 上传即删 | 原始货件文件解析后立即从 `/tmp` 删除 |
-| 一次性令牌下载 | 装箱单通过 `/api/download/{token}` 下载，用完销毁 |
-| 无公开文件路径 | 不暴露 `/downloads/` 目录，无跨请求文件残留 |
-| 批量 zip 内存打包 | zip 在内存中生成 base64，不落盘 |
-
-## 列名兼容性
-
-解析器自动识别 packing sheet 列名：MSKU、ASIN、商品申报量、箱子长/宽/高/重量、货件箱子编号等。
+---
 
 ## 项目结构
 
@@ -125,25 +132,33 @@ bao build preview -i FBA货件.xlsx
 bao/
 ├── api/index.py              # FastAPI Vercel 入口
 ├── bao/
-│   ├── cli.py                # CLI 入口
-│   ├── commands/             # build / check / serve / archive
-│   ├── core/                 # weaver / exporter
-│   ├── parsers/              # FBA Excel 解析器（纯 openpyxl）
-│   └── web/                  # server.py + index.html + index_vercel.html
-├── templates/                # 装箱单模板 + 发货计划模板
-├── pyproject.toml            # 依赖配置（Vercel 安装来源）
-└── restart.sh                # 本地面板启动脚本
+│   ├── core/
+│   │   ├── exporter.py       # 导出（颜色规则/品类匹配/DISPIMG/追踪码）
+│   │   └── weaver.py         # 编织（HS 查表/箱号标准化/灰色值注入）
+│   ├── parsers/
+│   │   └── fba_parser.py     # FBA packing sheet 解析器
+│   └── web/
+│       ├── server.py         # 本地 HTTP 服务
+│       ├── index.html        # 本地 Web 面板
+│       └── index_vercel.html # Vercel 在线面板
+├── data/
+│   └── hs_code.xlsx          # HS 编码知识库
+├── templates/                # 模板文件
+├── pyproject.toml            # 依赖配置
+└── README.md
 ```
 
 ## 依赖
 
-fastapi / python-multipart / openpyxl / pydantic / typer / rich
+fastapi / python-multipart / openpyxl / pydantic / typer / rich / Pillow
 
 ## 故障排除
 
 | 现象 | 解决 |
 |------|------|
-| 本地面板打不开 | 用 `127.0.0.1:7777`（默认端口） |
-| 端口占用 | `lsof -i :7777 -t \| xargs kill` |
-| 生成内容为空 | 确认上传的是 FBA packing sheet（含 MSKU 列） |
-| Vercel 报错 | 查看 Vercel Build Log 或 Functions 日志 |
+| 本地面板打不开 | 用 `127.0.0.1:8888`（默认端口） |
+| 端口占用 | `lsof -i :8888 -t \| xargs kill` |
+| Vercel 部署失败 | 查看 Vercel Build Log |
+| 输出图片显示 `#NAME?` | 模板为 DISPIMG 格式但 cellimages 未正确注入 |
+| 自定义模板列对不上 | 检查模板表头关键词是否在 PATTERNS 中 |
+| 追踪码未匹配 | 确认追踪码文件 FBA编号 列与 Shipment ID 一致 |

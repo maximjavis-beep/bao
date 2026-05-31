@@ -41,6 +41,8 @@ YELLOW_FILL = openpyxl.styles.PatternFill(start_color="FFFFFF00", end_color="FFF
 GRAY_FILL = openpyxl.styles.PatternFill(start_color="FFD8D8D8", end_color="FFD8D8D8", fill_type="solid")
 
 
+import logging
+
 class FBAExporter:
     def __init__(self, template_path: str = None, tracking_map: dict = None):
         self._template_path = Path(template_path) if template_path else _DEFAULT_TEMPLATE
@@ -174,6 +176,11 @@ class FBAExporter:
                 track_code = self._tracking_map.get(sid, "")
                 if track_code:
                     self._set_col(ws, r, col("reference_id"), track_code, center, bf, YELLOW_FILL)
+                elif r == data_start:
+                    import logging
+                    logging.getLogger("bao").warning(
+                        f"追踪码未匹配: sid={sid!r}, map_keys={list(self._tracking_map.keys())[:5]}"
+                    )
 
             yw = {
                 "shipment_id": woven.get("shipment_id", ""),
