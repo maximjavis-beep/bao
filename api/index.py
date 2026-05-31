@@ -216,20 +216,6 @@ async def api_merge_plan(file: UploadFile = File(...), plan_file: UploadFile = F
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, 400)
 
-@app.post("/api/track")
-async def api_track(file: UploadFile = File(...)):
-    try:
-        from bao.core.tracking import parse_label
-        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        suffix = Path(file.filename or "label.pdf").suffix or ".pdf"
-        tmp = UPLOAD_DIR / f"label_{uuid.uuid4().hex[:6]}{suffix}"
-        tmp.write_bytes(await file.read())
-        results = parse_label(str(tmp))
-        tmp.unlink(missing_ok=True)
-        return JSONResponse({"success": True, "results": results})
-    except Exception as e:
-        return JSONResponse({"success": False, "error": str(e)}, 400)
-
 @app.get("/api/download/{token}")
 async def dl_token(token: str):
     b64 = _DOWNLOAD_SLOTS.pop(token, None)
