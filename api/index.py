@@ -106,9 +106,10 @@ async def api_weave_batch(files: list[UploadFile] = File(...), hs_code: str = Fo
                 woven = weave_fba(d, hs_code_override=hs_code or None)
                 out = UPLOAD_DIR / f"{meta.get('shipment_id','UNKNOWN')}-装箱单_{uuid.uuid4().hex[:6]}.xlsx"
                 exporter.export(woven, str(out))
-                file_token = _make_token(out)
+                file_b64 = base64.b64encode(out.read_bytes()).decode()
+                out.unlink(missing_ok=True)
                 results.append({"filename": f.filename or "未知", "success": True,
-                    "shipment_id": meta.get("shipment_id",""), "file_token": file_token,
+                    "shipment_id": meta.get("shipment_id",""), "file_b64": file_b64,
                     "summary": {"shipment_id": woven["shipment_id"], "total_boxes": woven["total_boxes"],
                     "total_weight": woven["total_weight"], "total_cbm": woven["total_cbm"], "row_count": len(woven["rows"])}})
             except Exception as e:
@@ -128,13 +129,12 @@ async def api_weave_batch(files: list[UploadFile] = File(...), hs_code: str = Fo
                 except (sp.CalledProcessError, FileNotFoundError):
                     with zipfile.ZipFile(zd,"w") as zf:
                         for fl in sorted(td.iterdir()): zf.write(str(fl), fl.name)
-                zip_token = _make_token(Path(zd))
+                zip_b64 = base64.b64encode(Path(zd).read_bytes()).decode()
             except Exception:
-                zip_token = ""
                 pass
             finally:
-                shutil.rmtree(td, ignore_errors=True)
-        return JSONResponse({"success": True, "results": results, "zip_token": zip_token or ""})
+                shutil.rmtree(td, ignore_errors=True); Path(zd).unlink(missing_ok=True)
+        return JSONResponse({"success": True, "results": results, "zip_b64": zip_b64})
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, 400)
 
@@ -240,10 +240,8 @@ async def api_merge_plan(file: UploadFile = File(...), plan_file: UploadFile = F
         return JSONResponse({"success": False, "error": str(e)}, 400)
 
 @app.get("/api/download/{token}")
-async def dl_token(token: str, name: str = "装箱单.xlsx"):
+async def dl_token(token: str):
     b64 = _DOWNLOAD_SLOTS.pop(token, None)
     if not b64: return Response("Not Found or expired", status_code=404)
-    data = base64.b64decode(b64)
-    ct = "application/zip" if data[:2] == b'PK' and b'.zip' in name else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    return Response(content=data, media_type=ct,
-                    headers={"Content-Disposition": f"attachment; filename={name}"})
+    return Response(content=base64.b64decode(b64), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": "attachment; filename=装箱单.xlsx"})
