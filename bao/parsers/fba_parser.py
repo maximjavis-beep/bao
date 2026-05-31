@@ -7,6 +7,8 @@ class FBAParser:
     COLUMN_MAP = {
         "msku": ["MSKU"],
         "asin": ["ASIN"],
+        "title": ["标题", "品名"],
+        "input_hs_code": ["进口海关编码"],
         "declared_qty": ["商品申报量"],
         "boxed_qty": ["商品装箱量"],
         "box_count": ["箱数"],
@@ -36,6 +38,8 @@ class FBAParser:
                 continue
             items.append({
                 "msku": msku.strip(),
+                "title": self._cell(ws, row_idx, col_map.get("title")),
+                "input_hs_code": self._cell(ws, row_idx, col_map.get("input_hs_code")),
                 "asin": self._cell(ws, row_idx, col_map.get("asin")),
                 "declared_qty": self._as_float(ws, row_idx, col_map.get("declared_qty")),
                 "boxed_qty": self._as_float(ws, row_idx, col_map.get("boxed_qty")),

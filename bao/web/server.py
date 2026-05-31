@@ -125,12 +125,17 @@ class BaoHandler(BaseHTTPRequestHandler):
 
             b64 = body.get("file", "")
             hs_code = body.get("hs_code", None)
+            tpl_b64 = body.get("template", None)
 
             if not b64:
                 self._json({"success": False, "error": "未提供文件"}, 400)
                 return
 
             path = self._save(b64, "fba")
+            tpl_path = None
+            if tpl_b64:
+                tpl_path = self._save(tpl_b64, "tpl")
+
             data = parser.parse(path)
             meta = data.get("meta", {})
             sid = meta.get("shipment_id", "UNKNOWN")
@@ -139,7 +144,7 @@ class BaoHandler(BaseHTTPRequestHandler):
 
             fname = f"{sid}-装箱单_{uuid.uuid4().hex[:6]}.xlsx"
             out = UPLOAD_DIR / fname
-            exporter = FBAExporter()
+            exporter = FBAExporter(template_path=tpl_path)
             exporter.export(woven, str(out))
 
             DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -167,11 +172,15 @@ class BaoHandler(BaseHTTPRequestHandler):
             body = json.loads(self._read())
             files = body.get("files", [])
             hs_code = body.get("hs_code", None)
+            tpl_b64 = body.get("template", None)
             if not files:
                 self._json({"success": False, "error": "未提供文件"}, 400)
                 return
+            tpl_path = None
+            if tpl_b64:
+                tpl_path = self._save(tpl_b64, "tpl")
             parser = FBAParser()
-            exporter = FBAExporter()
+            exporter = FBAExporter(template_path=tpl_path)
             DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
             UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
             results = []

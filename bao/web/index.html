@@ -110,6 +110,13 @@ tr:hover td{background:#f8faff}
     </label>
     <div class="file-list" id="file-list"></div>
 
+    <label class="upload-zone" id="tpl-drop-zone" style="border-color:#8e44ad;margin-top:4px">
+      <input type="file" id="tpl-file-input" accept=".xlsx" onchange="handleTplFile(this)">
+      <div class="icon">📐</div>
+      <div class="text">可选：上传自定义模板</div>
+    </label>
+    <div class="plan-info" id="tpl-file-info"></div>
+
     <div class="hs-row">
       <label>HS编码：</label>
       <input type="text" id="hs-code" placeholder="自动匹配（蜡烛:3406000090）">
@@ -131,7 +138,7 @@ tr:hover td{background:#f8faff}
 <div class="toast" id="toast"></div>
 
 <script>
-let state = { files: [], parsed: null, woven: null, batchResult: null, planFile: null, adjPlanFile: null };
+let state = { files: [], parsed: null, woven: null, batchResult: null, planFile: null, adjPlanFile: null, templateFile: null };;
 let toastTimer;
 
 // ====== 上屏：调整明细 → 发货计划 ======
@@ -211,6 +218,12 @@ dz.addEventListener('drop', e => {
   handleFiles(document.getElementById('file-input'));
 });
 
+function handleTplFile(input) {
+  if (input.files.length === 0) return;
+  state.templateFile = input.files[0];
+  document.getElementById('tpl-file-info').textContent = '✓ ' + esc(state.templateFile.name);
+}
+
 function toast(msg, isError) {
   let t = document.getElementById('toast');
   t.textContent = msg;
@@ -218,6 +231,13 @@ function toast(msg, isError) {
   t.style.display = 'block';
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.style.display = 'none', 3000);
+}
+
+function readTplThen(fn) {
+  if (!state.templateFile) { fn(); return; }
+  let r = new FileReader();
+  r.onload = () => { fn(r.result.split(',')[1]); };
+  r.readAsDataURL(state.templateFile);
 }
 
 function readFile(file, cb) {
@@ -330,22 +350,28 @@ function doGenerateSingle() {
   if (state.files.length === 0) return toast('请先上传文件', true);
   let btn = document.getElementById('gen-btn');
   btn.disabled = true; btn.textContent = '⏳ 生成中…';
-  readFile(state.files[0], b64 => {
-    let body = { file: b64 };
-    let hs = document.getElementById('hs-code').value.trim();
+  readFile(state.files[0], function(b64) {
+    var body = { file: b64 };
+    var hs = document.getElementById('hs-code').value.trim();
     if (hs) body.hs_code = hs;
-    fetch('/api/weave', { method:'POST', body:JSON.stringify(body), headers:{'Content-Type':'application/json'} })
-    .then(r => r.json())
-    .then(d => {
-      btn.disabled = false; btn.textContent = '🧵 单件生成';
-      if (!d.success) { toast('生成失败: ' + d.error, true); return; }
-      state.woven = d;
-      let dl = document.getElementById('dl-btn');
-      dl.href = d.download_url; dl.download = d.download_url.split('/').pop();
-      dl.style.display = 'block'; dl.textContent = '⬇ 下载装箱单';
-      showResultSummary(d); showResultRows(d);
-      toast('✓ 生成完成');
-    }).catch(e => { btn.disabled = false; btn.textContent = '🧵 单件生成'; toast('生成失败', true); });
+    function doFetch() {
+      fetch('/api/weave', { method:'POST', body:JSON.stringify(body), headers:{'Content-Type':'application/json'} })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        btn.disabled = false; btn.textContent = '🧵 单件生成';
+        if (!d.success) { toast('生成失败: ' + d.error, true); return; }
+        state.woven = d;
+        var dl = document.getElementById('dl-btn');
+        dl.href = d.download_url; dl.download = d.download_url.split('/').pop();
+        dl.style.display = 'block'; dl.textContent = '⬇ 下载装箱单';
+        showResultSummary(d); showResultRows(d);
+        toast('✓ 生成完成');
+      }).catch(function(e) { btn.disabled = false; btn.textContent = '🧵 单件生成'; toast('生成失败', true); });
+    }
+    readTplThen(function(tpl_b64) {
+      if (tpl_b64) body.template = tpl_b64;
+      doFetch();
+    });
   });
 }
 
@@ -361,9 +387,12 @@ function doGenerateBatch() {
 }
 
 function doBatchCall(fileData, btn) {
-  let hs = document.getElementById('hs-code').value.trim();
-  fetch('/api/weave-batch', {
-    method:'POST', body:JSON.stringify({files:fileData,hs_code:hs||undefined}), headers:{'Content-Type':'application/json'}
+  var hs = document.getElementById('hs-code').value.trim();
+  function doFetch(tpl) {
+    var body = {files:fileData,hs_code:hs||undefined};
+    if (tpl) body.template = tpl;
+    fetch('/api/weave-batch', {
+    method:'POST', body:JSON.stringify(body), headers:{'Content-Type':'application/json'}
   })
   .then(r => r.json())
   .then(d => {
@@ -372,6 +401,8 @@ function doBatchCall(fileData, btn) {
     state.batchResult = d; showBatchResult(d);
     toast('✓ 批量完成 — ' + d.results.filter(r=>r.success).length + '/' + d.results.length + ' 成功');
   }).catch(e => { btn.disabled = false; btn.textContent = '📦 批量生成'; toast('生成失败', true); });
+  }
+  readTplThen(doFetch);
 }
 
 function showBatchResult(d) {

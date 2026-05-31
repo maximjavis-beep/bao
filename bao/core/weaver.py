@@ -16,27 +16,30 @@ _DEFAULT_HS_CODE = "3406000090"
 
 
 def load_hs_map() -> dict:
-    """加载 HS 编码对照表 {品类关键词: HS编码}"""
-    hs_map = {}
+    hs_map = {}; hs_import = {}; hs_code_map = {}; fields = {}
     if not _HS_PATH.exists():
-        return hs_map
-
+        return {"by_keyword": hs_map, "by_import": hs_import, "by_hs": hs_code_map, "fields": fields}
     wb = openpyxl.load_workbook(_HS_PATH, data_only=True)
     ws = wb.active
-    for row in ws.iter_rows(min_row=2, values_only=True):
-        keyword = str(row[0]).strip() if row[0] else ""
-        code = str(row[1]).strip() if row[1] else ""
-        if keyword and code:
-            hs_map[keyword] = code
+    col_names = [str(ws.cell(row=1,column=c).value or "").strip() for c in range(1,ws.max_column+1)]
+    for r in range(2, ws.max_row+1):
+        row_vals = [str(ws.cell(row=r,column=c).value or "").strip() for c in range(1,ws.max_column+1)]
+        kw = row_vals[0] if row_vals else ""; ic = row_vals[1] if len(row_vals)>1 else ""; hc = row_vals[2] if len(row_vals)>2 else ic
+        if kw and hc: hs_map[kw] = hc
+        if ic and hc: hs_import[ic] = hc; hs_code_map[ic] = ic
+        if hc:
+            hs_code_map[hc] = hc
+            info = {col_names[i]: row_vals[i] for i in range(min(len(col_names),len(row_vals))) if row_vals[i]}
+            fields[hc] = info
     wb.close()
-    return hs_map
+    return {"by_keyword": hs_map, "by_import": hs_import, "by_hs": hs_code_map, "fields": fields}
 
 
 def _box_range_normalize(box_range: str) -> str:
     """标准化箱号段：~ → -，单整数 → N-N"""
     if not box_range:
         return ""
-    val = box_range.strip().replace("~", "-")
+    val = box_range.strip().replace("～", "-").replace("~", "-")
     # 纯整数（无分隔符）→ 补全为 N-N
     if val.isdigit():
         val = f"{val}-{val}"
@@ -65,7 +68,11 @@ def weave_fba(data: dict, hs_code_override: Optional[str] = None) -> dict:
     shipment_id = meta.get("shipment_id", "")
     total_boxes = meta.get("total_boxes", 0)
 
-    hs_map = load_hs_map()
+    hs_data = load_hs_map()
+    by_keyword = hs_data["by_keyword"]
+    by_import = hs_data["by_import"]
+    by_hs = hs_data["by_hs"]
+    fields = hs_data["fields"]
     rows = []
     total_weight = 0.0
     total_cbm = 0.0
@@ -80,21 +87,38 @@ def weave_fba(data: dict, hs_code_override: Optional[str] = None) -> dict:
         height = item.get("height", 0)
         declared_qty = int(item.get("declared_qty", 0))
 
-        # HS 编码
+        # HS 编码匹配：优先进口海关编码 → HS CODE → 关键词
+        input_hs = item.get("input_hs_code", "")
         hs_code = hs_code_override or _DEFAULT_HS_CODE
+
         if not hs_code_override:
-            msku = item.get("msku", "")
-            for keyword, code in hs_map.items():
-                if keyword in msku:
-                    hs_code = code
-                    break
+            if input_hs and input_hs in by_import:
+                hs_code = by_import[input_hs]
+            elif input_hs and input_hs in by_hs:
+                hs_code = by_hs.get(input_hs, hs_code)
+            else:
+                msku = item.get("msku", "")
+                for keyword, code in by_keyword.items():
+                    if keyword in msku:
+                        hs_code = code
+                        break
+
+        # 获取 HS 表完整字段信息（供 exporter 品类映射用）
+        hs_fields = fields.get(hs_code, {})
 
         rows.append({
             "箱号段": box_range,
             "总件数": box_count,
             "SKU": item.get("msku", ""),
             "ASIN": item.get("asin", ""),
+            "标题": item.get("title", ""),
+            "进口海关编码": item.get("input_hs_code"),
             "海关编码": hs_code,
+            "英文品名": hs_fields.get("英文品名", ""),
+            "中文品名": hs_fields.get("中文品名", ""),
+            "品牌": hs_fields.get("备注", ""),
+            "材质": hs_fields.get("材质", ""),
+            "用途": hs_fields.get("用途", ""),
             "总数量": declared_qty,
             "单箱重量": weight,
             "长": length,
