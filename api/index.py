@@ -20,15 +20,44 @@ _DOWNLOAD_SLOTS = {}
 def _read_html(path): fp = ROOT_DIR / "bao" / "web" / path; return fp.read_text(encoding="utf-8") if fp.exists() else "<h1>404</h1>"
 
 def _parse_tracking(path):
-    """解析货件追踪码文件 → {FBA编号: 货件追踪码}"""
+    """解析货件追踪码文件 → {FBA编号: {tracking_code, warehouse, channel, total_boxes}}"""
     wb = openpyxl.load_workbook(path, data_only=True)
     ws = wb.active
+    # 按表头关键词自动定位列
+    col_map = {}
+    for c in range(1, min(20, ws.max_column or 0) + 1):
+        h = str(ws.cell(row=1, column=c).value or "").strip()
+        hl = h.lower()
+        if "fba编号" in hl or "fba" in hl:
+            col_map["fba"] = c
+        elif "货件追踪" in h or "追踪码" in h or "tracking" in hl:
+            col_map["tracking"] = c
+        elif "仓库代码" in h or "仓库" in h:
+            col_map["warehouse"] = c
+        elif "渠道" in h:
+            col_map["channel"] = c
+        elif "箱数" in h or "总件数" in h:
+            col_map["boxes"] = c
+    # 兜底：旧格式 列1=FBA编号, 列2=追踪码
+    if "fba" not in col_map:
+        col_map["fba"] = 1
+    if "tracking" not in col_map:
+        col_map["tracking"] = 2
     result = {}
     for r in range(2, ws.max_row + 1):
-        fba_id = str(ws.cell(row=r, column=1).value or "").strip()
-        code = str(ws.cell(row=r, column=2).value or "").strip()
-        if fba_id and code:
-            result[fba_id] = code
+        fba_id = str(ws.cell(row=r, column=col_map["fba"]).value or "").strip()
+        if not fba_id:
+            continue
+        info = {"tracking_code": str(ws.cell(row=r, column=col_map["tracking"]).value or "").strip()}
+        if "warehouse" in col_map:
+            info["warehouse"] = str(ws.cell(row=r, column=col_map["warehouse"]).value or "").strip()
+        if "channel" in col_map:
+            info["channel"] = str(ws.cell(row=r, column=col_map["channel"]).value or "").strip()
+        if "boxes" in col_map:
+            v = ws.cell(row=r, column=col_map["boxes"]).value
+            if v is not None:
+                info["total_boxes"] = int(v) if isinstance(v, (int, float)) else str(v).strip()
+        result[fba_id] = info
     wb.close()
     return result
 def _make_token(fp):
