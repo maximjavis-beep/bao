@@ -13,8 +13,11 @@ _DEFAULT_TEMPLATE = Path(__file__).parent.parent.parent / "templates" / "蜡烛-
 PATTERNS = [
     ("shipment_id",  ["shipment id", "shipmentid"]),
     ("reference_id", ["reference id", "referenceid"]),
+    ("reference_no", ["参考号"]),
     ("box_range",    ["箱号段", "箱号"]),
     ("total_boxes",  ["总件数"]),
+    ("warehouse",    ["目的仓库代码", "仓库代码"]),
+    ("channel",      ["渠道"]),
     ("sku",          ["sku"]),
     ("en_name",      ["英文品名"]),
     ("cn_name",      ["中文品名"]),
@@ -46,7 +49,14 @@ import logging
 class FBAExporter:
     def __init__(self, template_path: str = None, tracking_map: dict = None):
         self._template_path = Path(template_path) if template_path else _DEFAULT_TEMPLATE
-        self._tracking_map = tracking_map or {}
+        raw = tracking_map or {}
+        # 兼容旧格式 {"FBA编号": "追踪码"} / 新格式 {"FBA编号": {tracking_code, warehouse, ...}}
+        self._tracking_map = {}
+        for k, v in raw.items():
+            if isinstance(v, dict):
+                self._tracking_map[k] = v
+            else:
+                self._tracking_map[k] = {"tracking_code": str(v)}
         if not self._template_path.exists():
             raise FileNotFoundError(f"模板不存在: {self._template_path}")
 
@@ -57,7 +67,7 @@ class FBAExporter:
         ws = wb[ws_name]
         rows = woven.get("rows", [])
 
-        header_row, col_map = self._detect_template(ws)
+        header_row, col_map, meta_cells = self._detect_template(ws)
         data_start = header_row + 1
 
         def col(field: str) -> int:
@@ -146,13 +156,33 @@ class FBAExporter:
         r2 = {"total_boxes": woven.get("total_boxes", 0),
               "total_cbm": woven.get("total_cbm", 0),
               "total_weight": woven.get("total_weight", 0)}
+        center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        bf = Font(name="微软雅黑", size=10)
+
         for fld, val in r2.items():
             c = col(fld)
             if c > 0:
                 ws.cell(row=2, column=c, value=val)
 
-        center = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        bf = Font(name="微软雅黑", size=10)
+        # 从 tracking_map 填充模板元数据单元格（参考号/仓库代码/渠道/总件数）
+        if meta_cells and self._tracking_map:
+            sid = woven.get("shipment_id", "")
+            info = self._tracking_map.get(sid, {})
+            for field, (mr, mc) in meta_cells.items():
+                val = None
+                if field == "reference_no":
+                    val = sid
+                elif field == "total_boxes":
+                    val = info.get("total_boxes")
+                elif field == "warehouse":
+                    val = info.get("warehouse")
+                elif field == "channel":
+                    val = info.get("channel")
+                elif field == "shipment_id":
+                    val = sid
+                if val is not None:
+                    self._set_col(ws, mr, mc, str(val), center, bf, YELLOW_FILL)
+
         _temp_files = []
 
         for i, rd in enumerate(rows):
@@ -173,7 +203,8 @@ class FBAExporter:
             # 货件追踪码 lookup（Reference ID）
             if col("reference_id") > 0 and self._tracking_map:
                 sid = woven.get("shipment_id", "")
-                track_code = self._tracking_map.get(sid, "")
+                info = self._tracking_map.get(sid, {})
+                track_code = info.get("tracking_code", "")
                 if track_code:
                     self._set_col(ws, r, col("reference_id"), track_code, center, bf, YELLOW_FILL)
                 elif r == data_start:
@@ -277,7 +308,22 @@ class FBAExporter:
                         if field not in col_map:
                             col_map[field] = c
                         break
-        return best_row, col_map
+        # 扫描元数据行（表头上方的单值单元格）
+        # 元数据区模式：标签在左列，值在右列 → 匹配标签后偏移到值列
+        meta_cells = {}
+        for r in range(1, best_row):
+            for c in range(1, max_col):
+                val = str(ws.cell(row=r, column=c).value or "").strip().lower()
+                if not val:
+                    continue
+                for field, kws in PATTERNS:
+                    for kw in kws:
+                        # 元数据标签需精确匹配，避免「渠道」误匹配「渠道能力」
+                        if val == kw and field not in col_map:
+                            # 标签单元格 → 值在右边一列
+                            meta_cells[field] = (r, c + 1)
+                            break
+        return best_row, col_map, meta_cells
 
     @staticmethod
     def _set_col(ws, row, col_idx, value, align=None, font=None, fill=None):
