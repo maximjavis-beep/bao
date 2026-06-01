@@ -6,6 +6,7 @@ import openpyxl
 class FBAParser:
     COLUMN_MAP = {
         "msku": ["MSKU"],
+        "product_name": ["品名"],
         "asin": ["ASIN"],
         "title": ["标题", "品名"],
         "input_hs_code": ["进口海关编码"],
@@ -26,6 +27,10 @@ class FBAParser:
         wb = openpyxl.load_workbook(file_path, data_only=True)
         ws = wb["packing"] if "packing" in wb.sheetnames else wb.active
         meta = self._extract_meta(ws)
+        # 货件名称 (A3)
+        shipment_name = str(ws.cell(row=3, column=2).value or "").strip()
+        if shipment_name:
+            meta["shipment_name"] = shipment_name
         header_row = self._find_header_row(ws)
         if header_row < 0:
             wb.close()
@@ -38,6 +43,7 @@ class FBAParser:
                 continue
             items.append({
                 "msku": msku.strip(),
+                "product_name": self._cell(ws, row_idx, col_map.get("product_name")),
                 "title": self._cell(ws, row_idx, col_map.get("title")),
                 "input_hs_code": self._cell(ws, row_idx, col_map.get("input_hs_code")),
                 "asin": self._cell(ws, row_idx, col_map.get("asin")),

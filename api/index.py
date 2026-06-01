@@ -11,7 +11,7 @@ import openpyxl
 from openpyxl.styles import PatternFill
 from bao.parsers.fba_parser import FBAParser
 
-app = FastAPI(title="bao", version="0.5.2")
+app = FastAPI(title="bao", version="0.2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 ROOT_DIR = Path(__file__).parent.parent
 UPLOAD_DIR = Path("/tmp/bao_uploads")
@@ -23,7 +23,6 @@ def _parse_tracking(path):
     """解析货件追踪码文件 → {FBA编号: {tracking_code, warehouse, channel, total_boxes}}"""
     wb = openpyxl.load_workbook(path, data_only=True)
     ws = wb.active
-    # 按表头关键词自动定位列
     col_map = {}
     for c in range(1, min(20, ws.max_column or 0) + 1):
         h = str(ws.cell(row=1, column=c).value or "").strip()
@@ -38,7 +37,6 @@ def _parse_tracking(path):
             col_map["channel"] = c
         elif "箱数" in h or "总件数" in h:
             col_map["boxes"] = c
-    # 兜底：旧格式 列1=FBA编号, 列2=追踪码
     if "fba" not in col_map:
         col_map["fba"] = 1
     if "tracking" not in col_map:

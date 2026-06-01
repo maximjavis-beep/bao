@@ -1,6 +1,7 @@
 #!/bin/bash
 PORT=8888
-cd /Users/streiten/customs/bao
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
 PID=$(lsof -ti :$PORT 2>/dev/null)
 if [ -n "$PID" ]; then
     kill $PID 2>/dev/null || kill -9 $PID 2>/dev/null

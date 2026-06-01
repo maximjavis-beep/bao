@@ -47,16 +47,27 @@ GRAY_FILL = openpyxl.styles.PatternFill(start_color="FFD8D8D8", end_color="FFD8D
 import logging
 
 class FBAExporter:
-    def __init__(self, template_path: str = None, tracking_map: dict = None):
+    def __init__(self, template_path: str = None, tracking_map: dict = None, shipping_map: dict = None):
         self._template_path = Path(template_path) if template_path else _DEFAULT_TEMPLATE
         raw = tracking_map or {}
-        # 兼容旧格式 {"FBA编号": "追踪码"} / 新格式 {"FBA编号": {tracking_code, warehouse, ...}}
         self._tracking_map = {}
         for k, v in raw.items():
             if isinstance(v, dict):
                 self._tracking_map[k] = v
             else:
                 self._tracking_map[k] = {"tracking_code": str(v)}
+        if shipping_map:
+            for k, v in shipping_map.items():
+                if k in self._tracking_map:
+                    if isinstance(v, dict):
+                        for fk in ("warehouse", "channel", "total_boxes"):
+                            if fk in v and fk not in self._tracking_map[k]:
+                                self._tracking_map[k][fk] = v[fk]
+                else:
+                    if isinstance(v, dict):
+                        self._tracking_map[k] = v
+                    else:
+                        self._tracking_map[k] = {"tracking_code": str(v)}
         if not self._template_path.exists():
             raise FileNotFoundError(f"模板不存在: {self._template_path}")
 
@@ -253,7 +264,8 @@ class FBAExporter:
                 "cn_name":     rd.get("中文品名", ""),
                 "material":    rd.get("材质", ""),
                 "usage":       rd.get("用途", ""),
-                "hs_code":     _grey_defaults.get("hs_code", rd.get("海关编码", "")),
+                "brand":       rd.get("品牌", ""),
+                "hs_code":     rd.get("海关编码", ""),
             }
             for fld, val in yw.items():
                 if fld in grey_fields or val is None:

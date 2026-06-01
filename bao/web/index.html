@@ -145,7 +145,7 @@ tr:hover td{background:#f8faff}
 <div class="toast" id="toast"></div>
 
 <script>
-let state = { files: [], parsed: null, woven: null, batchResult: null, planFile: null, adjPlanFile: null, templateFile: null, trackingFile: null };
+let state = { files: [], parsed: null, woven: null, batchResult: null, planFile: null, adjPlanFile: null, templateFile: null, trackingFile: null, shippingFile: null };
 let toastTimer;
 
 // ====== 上屏：调整明细 → 发货计划 ======
@@ -237,6 +237,12 @@ function handleTrackFile(input) {
   document.getElementById('track-file-info').textContent = '✓ ' + esc(state.trackingFile.name);
 }
 
+function handleShipFile(input) {
+  if (input.files.length === 0) return;
+  state.shippingFile = input.files[0];
+  document.getElementById('ship-file-info').textContent = '✓ ' + esc(state.shippingFile.name);
+}
+
 function toast(msg, isError) {
   let t = document.getElementById('toast');
   t.textContent = msg;
@@ -258,6 +264,13 @@ function readTrackingThen(fn) {
   let r = new FileReader();
   r.onload = () => { fn(r.result.split(',')[1]); };
   r.readAsDataURL(state.trackingFile);
+}
+
+function readShipThen(fn) {
+  if (!state.shippingFile) { fn(); return; }
+  let r = new FileReader();
+  r.onload = () => { fn(r.result.split(',')[1]); };
+  r.readAsDataURL(state.shippingFile);
 }
 
 function readFile(file, cb) {
@@ -392,7 +405,10 @@ function doGenerateSingle() {
       if (tpl_b64) body.template = tpl_b64;
       readTrackingThen(function(track_b64) {
         if (track_b64) body.tracking = track_b64;
-        doFetch();
+        readShipThen(function(ship_b64) {
+          if (ship_b64) body.shipping = ship_b64;
+          doFetch();
+        });
       });
     });
   });

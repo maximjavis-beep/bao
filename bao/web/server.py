@@ -96,7 +96,6 @@ class BaoHandler(BaseHTTPRequestHandler):
         """解析货件追踪码文件 → {FBA编号: {tracking_code, warehouse, channel, total_boxes}}"""
         wb = openpyxl.load_workbook(path, data_only=True)
         ws = wb.active
-        # 按表头关键词自动定位列
         col_map = {}
         for c in range(1, min(20, ws.max_column or 0) + 1):
             h = str(ws.cell(row=1, column=c).value or "").strip()
@@ -111,7 +110,6 @@ class BaoHandler(BaseHTTPRequestHandler):
                 col_map["channel"] = c
             elif "箱数" in h or "总件数" in h:
                 col_map["boxes"] = c
-        # 兜底：旧格式 列1=FBA编号, 列2=追踪码
         if "fba" not in col_map:
             col_map["fba"] = 1
         if "tracking" not in col_map:
@@ -131,6 +129,24 @@ class BaoHandler(BaseHTTPRequestHandler):
                 if v is not None:
                     info["total_boxes"] = int(v) if isinstance(v, (int, float)) else str(v).strip()
             result[fba_id] = info
+        wb.close()
+        return result
+
+    @staticmethod
+    def _parse_shipping(path):
+        """出运数据 → {FBA编号: {wh, boxes, channel}}"""
+        wb = openpyxl.load_workbook(path, data_only=True)
+        ws = wb.active
+        result = {}
+        for r in range(2, ws.max_row + 1):
+            fba = str(ws.cell(row=r, column=2).value or "").strip()
+            if fba:
+                result[fba] = {
+                    "wh": str(ws.cell(row=r, column=1).value or "").strip(),
+                    "boxes": ws.cell(row=r, column=5).value,
+                    "channel": str(ws.cell(row=r, column=10).value or "").strip(),
+                    "tracking": str(ws.cell(row=r, column=3).value or "").strip(),
+                }
         wb.close()
         return result
 
@@ -182,6 +198,10 @@ class BaoHandler(BaseHTTPRequestHandler):
             tracking_map = None
             if track_b64:
                 tracking_map = self._parse_tracking(self._save(track_b64, "track"))
+            ship_b64 = body.get("shipping", None)
+            shipping_map = None
+            if ship_b64:
+                shipping_map = self._parse_shipping(self._save(ship_b64, "ship"))
 
             data = parser.parse(path)
             meta = data.get("meta", {})
@@ -191,7 +211,7 @@ class BaoHandler(BaseHTTPRequestHandler):
 
             fname = f"{sid}-装箱单_{uuid.uuid4().hex[:6]}.xlsx"
             out = UPLOAD_DIR / fname
-            exporter = FBAExporter(template_path=tpl_path, tracking_map=tracking_map)
+            exporter = FBAExporter(template_path=tpl_path, tracking_map=tracking_map, shipping_map=shipping_map or None)
             exporter.export(woven, str(out))
 
             DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -231,7 +251,7 @@ class BaoHandler(BaseHTTPRequestHandler):
             if track_b64:
                 tracking_map = self._parse_tracking(self._save(track_b64, "track"))
             parser = FBAParser()
-            exporter = FBAExporter(template_path=tpl_path, tracking_map=tracking_map)
+            exporter = FBAExporter(template_path=tpl_path, tracking_map=tracking_map, shipping_map=shipping_map or None)
             DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
             UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
             results = []
