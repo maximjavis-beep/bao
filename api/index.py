@@ -11,11 +11,16 @@ import openpyxl
 from openpyxl.styles import PatternFill
 from bao.parsers.fba_parser import FBAParser
 
-app = FastAPI(title="bao", version="0.2.0")
+app = FastAPI(title="bao", version="0.5.5")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 ROOT_DIR = Path(__file__).parent.parent
 UPLOAD_DIR = Path("/tmp/bao_uploads")
 _DOWNLOAD_SLOTS = {}
+
+BUILTIN_TEMPLATES = {
+    "desu": ("德速-模板", "德速-模板.xlsx"),
+}
+TEMPLATES_DIR = ROOT_DIR / "templates"
 
 def _read_html(path): fp = ROOT_DIR / "bao" / "web" / path; return fp.read_text(encoding="utf-8") if fp.exists() else "<h1>404</h1>"
 
@@ -64,6 +69,18 @@ def _make_token(fp):
     token = uuid.uuid4().hex; _DOWNLOAD_SLOTS[token] = b64
     fp.unlink(missing_ok=True); return token
 
+def _resolve_template(template_id):
+    if template_id and template_id in BUILTIN_TEMPLATES:
+        tpl_file = TEMPLATES_DIR / BUILTIN_TEMPLATES[template_id][1]
+        if tpl_file.exists():
+            return str(tpl_file)
+    return None
+
+@app.get("/api/templates")
+async def api_templates():
+    tpls = [{"id": k, "name": v[0]} for k, v in BUILTIN_TEMPLATES.items()]
+    return JSONResponse({"success": True, "templates": tpls})
+
 @app.get("/", response_class=HTMLResponse)
 async def index(): return _read_html("index_vercel.html")
 
@@ -80,7 +97,7 @@ async def api_parse(file: UploadFile = File(...)):
         return JSONResponse({"success": False, "error": str(e)}, 400)
 
 @app.post("/api/weave")
-async def api_weave(file: UploadFile = File(...), hs_code: str = Form(None), template: UploadFile = File(None), tracking: UploadFile = File(None)):
+async def api_weave(file: UploadFile = File(...), hs_code: str = Form(None), template: UploadFile = File(None), tracking: UploadFile = File(None), template_id: str = Form(None)):
     try:
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         tmp = UPLOAD_DIR / f"fba_{uuid.uuid4().hex[:6]}.xlsx"
@@ -93,6 +110,8 @@ async def api_weave(file: UploadFile = File(...), hs_code: str = Form(None), tem
             tpl_tmp = UPLOAD_DIR / f"tpl_{uuid.uuid4().hex[:6]}.xlsx"
             tpl_tmp.write_bytes(await template.read())
             tpl_path = str(tpl_tmp)
+        else:
+            tpl_path = _resolve_template(template_id)
         tracking_map = None
         if tracking:
             tk_tmp = UPLOAD_DIR / f"track_{uuid.uuid4().hex[:6]}.xlsx"
@@ -110,7 +129,7 @@ async def api_weave(file: UploadFile = File(...), hs_code: str = Form(None), tem
         return JSONResponse({"success": False, "error": str(e)}, 400)
 
 @app.post("/api/weave-batch")
-async def api_weave_batch(files: list[UploadFile] = File(...), hs_code: str = Form(None), template: UploadFile = File(None), tracking: UploadFile = File(None)):
+async def api_weave_batch(files: list[UploadFile] = File(...), hs_code: str = Form(None), template: UploadFile = File(None), tracking: UploadFile = File(None), template_id: str = Form(None)):
     try:
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         tpl_path = None
@@ -118,6 +137,8 @@ async def api_weave_batch(files: list[UploadFile] = File(...), hs_code: str = Fo
             tpl_tmp = UPLOAD_DIR / f"tpl_{uuid.uuid4().hex[:6]}.xlsx"
             tpl_tmp.write_bytes(await template.read())
             tpl_path = str(tpl_tmp)
+        else:
+            tpl_path = _resolve_template(template_id)
         tracking_map = None
         if tracking:
             tk_tmp = UPLOAD_DIR / f"track_{uuid.uuid4().hex[:6]}.xlsx"

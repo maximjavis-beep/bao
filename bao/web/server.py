@@ -23,6 +23,11 @@ WEB_DIR = Path(__file__).parent
 DOWNLOADS_DIR = WEB_DIR / "downloads"
 UPLOAD_DIR = Path(tempfile.gettempdir()) / "bao_uploads"
 
+BUILTIN_TEMPLATES = {
+    "desu": ("德速-模板", "德速-模板.xlsx"),
+}
+TEMPLATES_DIR = WEB_DIR.parent.parent / "templates"
+
 
 class BaoHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -45,6 +50,8 @@ class BaoHandler(BaseHTTPRequestHandler):
                 self.send_error(404)
         elif p == "/api/download-zip":
             self._handle_download_zip()
+        elif p == "/api/templates":
+            self._handle_templates()
         else:
             self.send_error(404)
 
@@ -150,6 +157,20 @@ class BaoHandler(BaseHTTPRequestHandler):
         wb.close()
         return result
 
+    @staticmethod
+    def _resolve_template(template_id):
+        """根据 template_id 返回模板路径，None 表示使用默认"""
+        if template_id and template_id in BUILTIN_TEMPLATES:
+            tpl_file = TEMPLATES_DIR / BUILTIN_TEMPLATES[template_id][1]
+            if tpl_file.exists():
+                return str(tpl_file)
+        return None
+
+    def _handle_templates(self):
+        """返回内置模板列表"""
+        tpls = [{"id": k, "name": v[0]} for k, v in BUILTIN_TEMPLATES.items()]
+        self._json({"success": True, "templates": tpls})
+
     def _handle_parse(self):
         """解析上传的 FBA 货件文件，返回预览数据"""
         try:
@@ -195,6 +216,8 @@ class BaoHandler(BaseHTTPRequestHandler):
             tpl_path = None
             if tpl_b64:
                 tpl_path = self._save(tpl_b64, "tpl")
+            else:
+                tpl_path = self._resolve_template(body.get("template_id", ""))
             tracking_map = None
             if track_b64:
                 tracking_map = self._parse_tracking(self._save(track_b64, "track"))
@@ -247,6 +270,8 @@ class BaoHandler(BaseHTTPRequestHandler):
             tpl_path = None
             if tpl_b64:
                 tpl_path = self._save(tpl_b64, "tpl")
+            else:
+                tpl_path = self._resolve_template(body.get("template_id", ""))
             tracking_map = None
             if track_b64:
                 tracking_map = self._parse_tracking(self._save(track_b64, "track"))

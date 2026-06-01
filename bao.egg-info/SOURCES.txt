@@ -1,5 +1,6 @@
 README.md
 pyproject.toml
+api/index.py
 bao/__init__.py
 bao/cli.py
 bao.egg-info/PKG-INFO
@@ -9,9 +10,15 @@ bao.egg-info/entry_points.txt
 bao.egg-info/requires.txt
 bao.egg-info/top_level.txt
 bao/commands/__init__.py
+bao/commands/archive.py
 bao/commands/build.py
+bao/commands/check.py
+bao/commands/serve.py
 bao/core/__init__.py
 bao/core/exporter.py
+bao/core/history.py
+bao/core/knowledge.py
+bao/core/validator.py
 bao/core/weaver.py
 bao/db/__init__.py
 bao/db/connection.py
@@ -24,5 +31,7 @@ bao/models/packing.py
 bao/models/rules.py
 bao/parsers/__init__.py
 bao/parsers/excel_parser.py
+bao/parsers/fba_parser.py
 bao/web/__init__.py
+bao/web/server.py
 tests/__init__.py

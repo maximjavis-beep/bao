@@ -2,3 +2,4 @@ bao/web/downloads/
 data/bao.db*
 data/server.log
 .DS_Store
+venv/

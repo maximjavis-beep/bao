@@ -110,6 +110,13 @@ tr:hover td{background:#f8faff}
     </label>
     <div class="file-list" id="file-list"></div>
 
+    <div class="tpl-select-row" style="margin-top:4px;display:flex;align-items:center;gap:6px">
+      <span style="font-size:12px;color:#888">常用模板：</span>
+      <select id="template-select" onchange="onTemplateSelect(this)" style="flex:1;padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px">
+        <option value="">-- 不上传（使用默认蜡烛模板）--</option>
+      </select>
+    </div>
+
     <label class="upload-zone" id="tpl-drop-zone" style="border-color:#8e44ad;margin-top:4px">
       <input type="file" id="tpl-file-input" accept=".xlsx" onchange="handleTplFile(this)">
       <div class="icon">📐</div>
@@ -145,7 +152,7 @@ tr:hover td{background:#f8faff}
 <div class="toast" id="toast"></div>
 
 <script>
-let state = { files: [], parsed: null, woven: null, batchResult: null, planFile: null, adjPlanFile: null, templateFile: null, trackingFile: null, shippingFile: null };
+let state = { files: [], parsed: null, woven: null, batchResult: null, planFile: null, adjPlanFile: null, templateFile: null, trackingFile: null, shippingFile: null, templateId: '' };
 let toastTimer;
 
 // ====== 上屏：调整明细 → 发货计划 ======
@@ -403,6 +410,7 @@ function doGenerateSingle() {
     }
     readTplThen(function(tpl_b64) {
       if (tpl_b64) body.template = tpl_b64;
+      else if (state.templateId) body.template_id = state.templateId;
       readTrackingThen(function(track_b64) {
         if (track_b64) body.tracking = track_b64;
         readShipThen(function(ship_b64) {
@@ -430,6 +438,7 @@ function doBatchCall(fileData, btn) {
   function doFetch(tpl) {
     var body = {files:fileData,hs_code:hs||undefined};
     if (tpl) body.template = tpl;
+    else if (state.templateId) body.template_id = state.templateId;
     fetch('/api/weave-batch', {
     method:'POST', body:JSON.stringify(body), headers:{'Content-Type':'application/json'}
   })
@@ -490,6 +499,23 @@ function downloadZipB64(b64) {
 }
 
 function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function onTemplateSelect(sel) {
+  state.templateId = sel.value;
+  if (state.templateId) {
+    document.getElementById('tpl-file-info').textContent = '✓ 已选：' + sel.options[sel.selectedIndex].text;
+  } else {
+    document.getElementById('tpl-file-info').textContent = '';
+  }
+}
+
+fetch('/api/templates').then(r=>r.json()).then(d=>{
+  if (d.success) {
+    var sel = document.getElementById('template-select');
+    d.templates.forEach(t=>{ var o=document.createElement('option'); o.value=t.id; o.textContent=t.name; sel.appendChild(o); });
+  }
+});
+
 </script>
 </body>
 </html>
