@@ -781,6 +781,11 @@ function downloadCustomsB64(b64) {
   URL.revokeObjectURL(url);
 }
 
+function b64ToBlob(b64, mime) {
+  let raw = atob(b64), arr = new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) arr[i]=raw.charCodeAt(i);
+  return new Blob([arr], {type: mime});
+}
 function downloadB64(filename, b64) {
   let blob = b64ToBlob(b64, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   let url = URL.createObjectURL(blob);
