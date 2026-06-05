@@ -181,7 +181,7 @@ class FBAExporter:
                 if hs_key in template_categories:
                     continue
                 cat_data = {}
-                for fld in _GREY_COPY_FIELDS:
+                for fld in grey_fields:
                     c = col(fld)
                     if c > 0:
                         v = ws.cell(row=sr, column=c).value
@@ -342,8 +342,8 @@ class FBAExporter:
                             self._set_col(ws, r, c, _override_source[fld], center, bf, None)
                             _jiufang_written.add(fld)
 
-            # 从模板复制特定灰色字段
-            for fld in _GREY_COPY_FIELDS:
+            # 从模板复制灰色字段（所有检测到的灰色列）
+            for fld in grey_fields:
                 c = col(fld)
                 if c <= 0:
                     continue
