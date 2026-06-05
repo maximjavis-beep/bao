@@ -13,7 +13,7 @@ from openpyxl.styles import PatternFill
 from bao.parsers.customs_pdf_parser import CustomsPDFParser
 from bao.parsers.fba_parser import FBAParser
 
-app = FastAPI(title="bao", version="0.6.1")
+app = FastAPI(title="bao", version="0.6.2")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 ROOT_DIR = Path(__file__).parent.parent
 UPLOAD_DIR = Path("/tmp/bao_uploads")
@@ -21,6 +21,7 @@ _DOWNLOAD_SLOTS = {}
 
 BUILTIN_TEMPLATES = {
     "desu": ("德速-模板", "德速-模板.xlsx"),
+    "jiufang": ("九方-模板", "九方-模版.xlsx"),
 }
 TEMPLATES_DIR = ROOT_DIR / "templates"
 

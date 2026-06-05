@@ -27,6 +27,7 @@ UPLOAD_DIR = Path(tempfile.gettempdir()) / "bao_uploads"
 
 BUILTIN_TEMPLATES = {
     "desu": ("德速-模板", "德速-模板.xlsx"),
+    "jiufang": ("九方-模板", "九方-模版.xlsx"),
 }
 TEMPLATES_DIR = WEB_DIR.parent.parent / "templates"
 
@@ -281,8 +282,11 @@ class BaoHandler(BaseHTTPRequestHandler):
             tracking_map = None
             if track_b64:
                 tracking_map = self._parse_tracking(self._save(track_b64, "track"))
+            ship_b64 = body.get("shipping", None)
+            shipping_map = None
+            if ship_b64:
+                shipping_map = self._parse_shipping(self._save(ship_b64, "ship"))
             parser = FBAParser()
-            exporter = FBAExporter(template_path=tpl_path, tracking_map=tracking_map, shipping_map=shipping_map or None)
             DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
             UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
             results = []
@@ -300,6 +304,7 @@ class BaoHandler(BaseHTTPRequestHandler):
                     woven = weave_fba(data, hs_code_override=hs_code)
                     out_fname = f"{sid}-装箱单_{uuid.uuid4().hex[:6]}.xlsx"
                     out = UPLOAD_DIR / out_fname
+                    exporter = FBAExporter(template_path=tpl_path, tracking_map=tracking_map, shipping_map=shipping_map)
                     exporter.export(woven, str(out))
                     shutil.copy2(out, DOWNLOADS_DIR / out_fname)
                     results.append({
@@ -339,8 +344,9 @@ class BaoHandler(BaseHTTPRequestHandler):
                     zip_b64 = base64.b64encode(Path(zd).read_bytes()).decode()
                     shutil.rmtree(td, ignore_errors=True)
                     Path(zd).unlink(missing_ok=True)
-                except Exception:
-                    pass
+                except Exception as _ze:
+                    import traceback as _tb
+                    _tb.print_exc()
             self._json({"success": True, "results": results, "zip_b64": zip_b64})
         except Exception as e:
             self._json({"success": False, "error": str(e)}, 400)
@@ -559,7 +565,7 @@ class BaoHandler(BaseHTTPRequestHandler):
             DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
             xlsx_files = sorted(DOWNLOADS_DIR.glob("*.xlsx"), key=lambda f: f.stat().st_mtime, reverse=True)
             if not xlsx_files:
-                self.send_error(404)
+                self._json({"success": False, "error": "下载目录为空，请先生成装箱单"}, 404)
                 return
 
             UPLOAD_DIR.mkdir(parents=True, exist_ok=True)

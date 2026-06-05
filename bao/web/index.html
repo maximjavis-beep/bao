@@ -66,7 +66,7 @@ tr:hover td{background:#f8faff}
 
 <div class="header">
   <h1>📦 bao</h1>
-  <span class="ver">v0.6.1 — 出口报关文件编织助手</span>
+  <span class="ver">v0.6.2 — 出口报关文件编织助手</span>
 </div>
 
 <!-- ====== 上屏：调整明细 → 发货计划 ====== -->
@@ -117,7 +117,7 @@ tr:hover td{background:#f8faff}
       <div class="tpl-select-row" style="margin-top:4px;display:flex;align-items:center;gap:6px">
         <span style="font-size:12px;color:#888">常用模板：</span>
         <select id="template-select" onchange="onTemplateSelect(this)" style="flex:1;padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px">
-          <option value="">-- 不上传（使用默认蜡烛模板）--</option>
+          <option value="">-- 不上传（使用默认德速模版）--</option>
         </select>
       </div>
       <label class="upload-zone" id="tpl-drop-zone" style="border-color:#8e44ad;margin-top:4px">
@@ -446,95 +446,71 @@ function doGenerateSingle() {
 
 function doGenerateBatch() {
   if (state.files.length === 0) return toast('请先上传文件', true);
-  let total = state.files.length;
   let btn = document.getElementById('gen-batch-btn');
-  btn.disabled = true; btn.textContent = '⏳ 0/' + total;
-  let hs = document.getElementById('hs-code').value.trim();
+  btn.disabled = true; btn.textContent = '⏳ 批量生成中…';
+  document.getElementById('batch-result').innerHTML = '<div class="loading"><span class="spinner"></span>处理 ' + state.files.length + ' 个文件…</div>';
+  let pending = state.files.length, fileData = [];
+  state.files.forEach(file => {
+    readFile(file, b64 => { fileData.push({name:file.name,data:b64}); pending--; if(pending===0)doBatchCall(fileData,btn); });
+  });
+}
 
-  // 初始化结果区域
-  document.getElementById('batch-result').innerHTML = '<div style="margin-top:6px" id="batch-prog">⏳ 准备中…</div><div id="batch-list"></div>';
-  document.getElementById('summary').innerHTML = '<div class="section-title section-title-bao">📊 批量生成</div><div class="info-grid"><div class="info-card"><div class="num" id="batch-ok">0</div><div class="lbl">成功</div></div><div class="info-card"><div class="num" id="batch-fail">0</div><div class="lbl">失败</div></div></div>';
-
-  let okCount = 0, failCount = 0, finished = 0;
-  let fileData = [];
-
-  function updateProgress() {
-    let pct = Math.round(finished / total * 100);
-    btn.textContent = '⏳ ' + finished + '/' + total + ' (' + pct + '%)';
-    document.getElementById('batch-prog').innerHTML = '⏳ <span class="spinner"></span> ' + finished + '/' + total;
-    document.getElementById('batch-ok').textContent = okCount;
-    document.getElementById('batch-fail').textContent = failCount;
-  }
-
-  function appendResult(r) {
-    let list = document.getElementById('batch-list');
-    list.innerHTML += '<div style="font-size:11px;padding:3px 0"><span class="'+(r.success?'ok':'fail')+'">'+(r.success?'✓':'✗')+'</span> '+esc(r.success?r.shipment_id:r.filename)+(r.success?' <a href="'+r.download_url+'" style="color:#4a90d9;font-size:10px" download>下载</a>':' — '+esc(r.error))+'</div>';
-  }
-
-  function finalize() {
+function doBatchCall(fileData, btn) {
+  var hs = document.getElementById('hs-code').value.trim();
+  function doFetch(tpl_b64, track_b64, ship_b64) {
+    var body = {files:fileData,hs_code:hs||undefined};
+    if (tpl_b64) body.template = tpl_b64;
+    else if (state.templateId) body.template_id = state.templateId;
+    if (track_b64) body.tracking = track_b64;
+    if (ship_b64) body.shipping = ship_b64;
+    fetch('/api/weave-batch', {
+    method:'POST', body:JSON.stringify(body), headers:{'Content-Type':'application/json'}
+  })
+  .then(r => r.json())
+  .then(d => {
     btn.disabled = false; btn.textContent = '📦 批量生成';
-    document.getElementById('batch-prog').innerHTML = '✅ 完成 — ' + okCount + ' 成功, ' + failCount + ' 失败';
-    toast('✓ 批量完成 — ' + okCount + '/' + total + ' 成功');
+    if (!d.success) { toast('批量生成失败: ' + d.error, true); return; }
+    state.batchResult = d; showBatchResult(d);
+    toast('✓ 批量完成 — ' + d.results.filter(r=>r.success).length + '/' + d.results.length + ' 成功');
+  }).catch(e => { btn.disabled = false; btn.textContent = '📦 批量生成'; document.getElementById('batch-result').innerHTML = '<div style="color:#e74c3c;margin-top:6px">❌ 请求失败: ' + esc(e.message||'网络错误') + '</div>'; toast('生成失败', true); });
   }
-
-  function processFile(fileObj, i) {
-    let body = { file: fileObj.data };
-    if (hs) body.hs_code = hs;
-    if (state.templateFile) {
-      let r2 = new FileReader();
-      r2.onload = () => {
-        body.template = r2.result.split(',')[1];
-        doWeave();
-      };
-      r2.readAsDataURL(state.templateFile);
-    } else if (state.templateId) {
-      body.template_id = state.templateId;
-      doWeave();
-    } else {
-      doWeave();
-    }
-    function doWeave() {
-      fetch('/api/weave', {
-        method: 'POST',
-        body: JSON.stringify(body),
-        headers: {'Content-Type': 'application/json'}
-      })
-      .then(r => r.json())
-      .then(d => {
-        if (d.success) {
-          okCount++;
-          let sid = (d.summary && d.summary.shipment_id) ? d.summary.shipment_id : fileObj.name;
-          appendResult({ success: true, shipment_id: sid, download_url: d.download_url });
-        } else {
-          failCount++;
-          appendResult({ success: false, filename: fileObj.name, error: d.error || '未知错误' });
-        }
-        finished++;
-        updateProgress();
-        if (finished === total) finalize();
-      })
-      .catch(e => {
-        failCount++; finished++;
-        appendResult({ success: false, filename: fileObj.name, error: e.message });
-        updateProgress();
-        if (finished === total) finalize();
+  readTplThen(function(tplResult) {
+    var tpl_b64 = tplResult;
+    readTrackingThen(function(trackResult) {
+      readShipThen(function(shipResult) {
+        doFetch(tpl_b64, trackResult, shipResult);
       });
-    }
-  }
-
-  // 读取所有文件后逐个处理
-  let readCount = 0;
-  state.files.forEach((f, i) => {
-    readFile(f, b64 => {
-      fileData[i] = { name: f.name, data: b64 };
-      readCount++;
-      if (readCount === total) {
-        // 全部读完，开始逐个处理
-        fileData.forEach((fd, idx) => processFile(fd, idx));
-      }
     });
   });
 }
+
+function showBatchResult(d) {
+  let okCount = d.results.filter(r=>r.success).length;
+  let html = '<div style="margin-top:6px">';
+
+  // 主通道：base64 ZIP（即时，来自本次批量响应）
+  if (d.zip_b64) {
+    window._batchZipB64 = d.zip_b64;
+    html += '<a class="btn btn-zip" href="javascript:void(0)" onclick="downloadZipB64(window._batchZipB64)" style="margin-bottom:6px;font-size:11px;padding:6px;display:block;text-align:center">📥 批量下载 ZIP</a>';
+  }
+  // 兜底：GET /api/download-zip（从 downloads 目录实时打包）
+  html += '<a class="btn btn-zip" href="/api/download-zip" download style="margin-bottom:6px;font-size:11px;padding:6px;display:block;text-align:center">📥 批量下载 ZIP（备用）</a>';
+
+  d.results.forEach(r => {
+    html += '<div style="font-size:11px;padding:3px 0"><span class="'+(r.success?'ok':'fail')+'">'+(r.success?'✓':'✗')+'</span> '+esc(r.success?r.shipment_id:r.filename)+(r.success?' <a href="'+r.download_url+'" style="color:#4a90d9;font-size:10px">下载</a>':' — '+esc(r.error))+'</div>';
+  });
+  html += '</div>';
+  document.getElementById('batch-result').innerHTML = html;
+  var sumHtml = '<div class="section-title section-title-bao">📊 批量生成结果</div><div class="info-grid"><div class="info-card"><div class="num">'+d.results.length+'</div><div class="lbl">总文件数</div></div><div class="info-card"><div class="num" style="color:#27ae60">'+okCount+'</div><div class="lbl">成功</div></div></div>';
+  if (d.zip_b64) {
+    sumHtml += '<a class="btn btn-zip" href="javascript:void(0)" onclick="downloadZipB64(window._batchZipB64)" style="display:block;margin-top:8px;padding:8px;text-align:center;font-size:12px">📥 批量下载 ZIP</a>';
+  } else {
+    sumHtml += '<a class="btn btn-zip" href="/api/download-zip" download style="display:block;margin-top:8px;padding:8px;text-align:center;font-size:12px">📥 批量下载 ZIP</a>';
+  }
+  document.getElementById('summary').innerHTML = sumHtml;
+}
+
+
 
 function showResultSummary(d) {
   let s = d.summary || {};
@@ -759,6 +735,15 @@ function showCustomsStats(d) {
   html += '</div>';
   document.getElementById('customs-summary-stats').innerHTML = html;
 }
+
+function downloadZipB64(b64) {
+  let raw = atob(b64), arr = new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) arr[i]=raw.charCodeAt(i);
+  let blob = new Blob([arr],{type:'application/zip'}), url = URL.createObjectURL(blob);
+  let a = document.createElement('a'); a.href=url; a.download='装箱单_批量.zip'; a.click();
+  URL.revokeObjectURL(url);
+}
+
 
 function downloadCustomsB64(b64) {
   let raw = atob(b64), arr = new Uint8Array(raw.length);
