@@ -66,6 +66,45 @@ def _parse_tracking(path):
         result[fba_id] = info
     wb.close()
     return result
+def _parse_shipping(path):
+    """出运数据 → {FBA编号: {warehouse, channel, total_boxes, tracking_code}}"""
+    wb = openpyxl.load_workbook(path, data_only=True)
+    ws = wb.active
+    result = {}
+    col_map = {}
+    for c in range(1, min(20, ws.max_column or 0) + 1):
+        h = str(ws.cell(row=1, column=c).value or "").strip()
+        hl = h.lower()
+        if "fba编号" in hl or "fba" in hl:
+            col_map["fba"] = c
+        elif "货件追踪" in h or "追踪码" in h or "tracking" in hl:
+            col_map["tracking"] = c
+        elif "仓库代码" in h or "仓库" in h:
+            col_map["warehouse"] = c
+        elif "渠道" in h:
+            col_map["channel"] = c
+        elif "箱数" in h or "总件数" in h:
+            col_map["boxes"] = c
+    if "fba" not in col_map:
+        col_map["fba"] = 2
+    for r in range(2, ws.max_row + 1):
+        fba_id = str(ws.cell(row=r, column=col_map.get("fba", 2)).value or "").strip()
+        if not fba_id:
+            continue
+        info = {}
+        if "warehouse" in col_map:
+            info["warehouse"] = str(ws.cell(row=r, column=col_map["warehouse"]).value or "").strip()
+        if "channel" in col_map:
+            info["channel"] = str(ws.cell(row=r, column=col_map["channel"]).value or "").strip()
+        if "boxes" in col_map:
+            v = ws.cell(row=r, column=col_map["boxes"]).value
+            if v is not None:
+                info["total_boxes"] = int(v) if isinstance(v, (int, float)) else str(v).strip()
+        if "tracking" in col_map:
+            info["tracking_code"] = str(ws.cell(row=r, column=col_map["tracking"]).value or "").strip()
+        result[fba_id] = info
+    wb.close()
+    return result
 def _make_token(fp):
     if not fp.exists(): return ""
     b64 = base64.b64encode(fp.read_bytes()).decode()
@@ -111,7 +150,7 @@ async def api_parse(request: Request, file: UploadFile = File(None)):
         return JSONResponse({"success": False, "error": str(e)}, 400)
 
 @app.post("/api/weave")
-async def api_weave(file: UploadFile = File(...), hs_code: str = Form(None), template: UploadFile = File(None), tracking: UploadFile = File(None), template_id: str = Form(None)):
+async def api_weave(file: UploadFile = File(...), hs_code: str = Form(None), template: UploadFile = File(None), tracking: UploadFile = File(None), shipping: UploadFile = File(None), template_id: str = Form(None)):
     try:
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         tmp = UPLOAD_DIR / f"fba_{uuid.uuid4().hex[:6]}.xlsx"
@@ -131,8 +170,13 @@ async def api_weave(file: UploadFile = File(...), hs_code: str = Form(None), tem
             tk_tmp = UPLOAD_DIR / f"track_{uuid.uuid4().hex[:6]}.xlsx"
             tk_tmp.write_bytes(await tracking.read())
             tracking_map = _parse_tracking(str(tk_tmp))
+        shipping_map = None
+        if shipping:
+            sh_tmp = UPLOAD_DIR / f"ship_{uuid.uuid4().hex[:6]}.xlsx"
+            sh_tmp.write_bytes(await shipping.read())
+            shipping_map = _parse_shipping(str(sh_tmp))
         out = UPLOAD_DIR / f"{meta.get('shipment_id','UNKNOWN')}-装箱单_{uuid.uuid4().hex[:6]}.xlsx"
-        FBAExporter(template_path=tpl_path, tracking_map=tracking_map).export(woven, str(out))
+        FBAExporter(template_path=tpl_path, tracking_map=tracking_map, shipping_map=shipping_map).export(woven, str(out))
         file_b64 = base64.b64encode(out.read_bytes()).decode()
         out.unlink(missing_ok=True)
         return JSONResponse({"success": True, "file_b64": file_b64, "summary": {
@@ -143,7 +187,7 @@ async def api_weave(file: UploadFile = File(...), hs_code: str = Form(None), tem
         return JSONResponse({"success": False, "error": str(e)}, 400)
 
 @app.post("/api/weave-batch")
-async def api_weave_batch(files: list[UploadFile] = File(...), hs_code: str = Form(None), template: UploadFile = File(None), tracking: UploadFile = File(None), template_id: str = Form(None)):
+async def api_weave_batch(files: list[UploadFile] = File(...), hs_code: str = Form(None), template: UploadFile = File(None), tracking: UploadFile = File(None), shipping: UploadFile = File(None), template_id: str = Form(None)):
     try:
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         tpl_path = None
@@ -158,7 +202,12 @@ async def api_weave_batch(files: list[UploadFile] = File(...), hs_code: str = Fo
             tk_tmp = UPLOAD_DIR / f"track_{uuid.uuid4().hex[:6]}.xlsx"
             tk_tmp.write_bytes(await tracking.read())
             tracking_map = _parse_tracking(str(tk_tmp))
-        parser, exporter, results = FBAParser(), FBAExporter(template_path=tpl_path, tracking_map=tracking_map), []
+        shipping_map = None
+        if shipping:
+            sh_tmp = UPLOAD_DIR / f"ship_{uuid.uuid4().hex[:6]}.xlsx"
+            sh_tmp.write_bytes(await shipping.read())
+            shipping_map = _parse_shipping(str(sh_tmp))
+        parser, exporter, results = FBAParser(), FBAExporter(template_path=tpl_path, tracking_map=tracking_map, shipping_map=shipping_map), []
         for f in files:
             try:
                 tmp = UPLOAD_DIR / f"fba_{uuid.uuid4().hex[:6]}.xlsx"
