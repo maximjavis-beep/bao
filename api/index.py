@@ -150,28 +150,55 @@ async def api_parse(request: Request, file: UploadFile = File(None)):
         return JSONResponse({"success": False, "error": str(e)}, 400)
 
 @app.post("/api/weave")
-async def api_weave(file: UploadFile = File(...), hs_code: str = Form(None), template: UploadFile = File(None), tracking: UploadFile = File(None), shipping: UploadFile = File(None), template_id: str = Form(None)):
+async def api_weave(request: Request, file: UploadFile = File(None), hs_code: str = Form(None), template: UploadFile = File(None), tracking: UploadFile = File(None), shipping: UploadFile = File(None), template_id: str = Form(None)):
     try:
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        tmp = UPLOAD_DIR / f"fba_{uuid.uuid4().hex[:6]}.xlsx"
-        tmp.write_bytes(await file.read())
+        content_type = request.headers.get("content-type", "")
+        if "application/json" in content_type:
+            body = await request.json()
+            b64 = body.get("file", "")
+            if not b64: return JSONResponse({"success": False, "error": "未提供文件"}, 400)
+            tmp = UPLOAD_DIR / f"fba_{uuid.uuid4().hex[:6]}.xlsx"
+            tmp.write_bytes(base64.b64decode(b64))
+            hs_code = body.get("hs_code") or hs_code
+            tpl_b64 = body.get("template")
+            track_b64 = body.get("tracking")
+            ship_b64 = body.get("shipping")
+            template_id = body.get("template_id") or template_id
+        elif file:
+            tmp = UPLOAD_DIR / f"fba_{uuid.uuid4().hex[:6]}.xlsx"
+            tmp.write_bytes(await file.read())
+        else:
+            return JSONResponse({"success": False, "error": "未提供文件"}, 400)
         data = FBAParser().parse(str(tmp)); tmp.unlink(missing_ok=True)
         meta = data.get("meta", {})
         woven = weave_fba(data, hs_code_override=hs_code or None)
         tpl_path = None
-        if template:
+        if "application/json" in content_type and locals().get('tpl_b64'):
+            tpl_tmp = UPLOAD_DIR / f"tpl_{uuid.uuid4().hex[:6]}.xlsx"
+            tpl_tmp.write_bytes(base64.b64decode(tpl_b64))
+            tpl_path = str(tpl_tmp)
+        elif template:
             tpl_tmp = UPLOAD_DIR / f"tpl_{uuid.uuid4().hex[:6]}.xlsx"
             tpl_tmp.write_bytes(await template.read())
             tpl_path = str(tpl_tmp)
         else:
             tpl_path = _resolve_template(template_id)
         tracking_map = None
-        if tracking:
+        if "application/json" in content_type and locals().get('track_b64'):
+            tk_tmp = UPLOAD_DIR / f"track_{uuid.uuid4().hex[:6]}.xlsx"
+            tk_tmp.write_bytes(base64.b64decode(track_b64))
+            tracking_map = _parse_tracking(str(tk_tmp))
+        elif tracking:
             tk_tmp = UPLOAD_DIR / f"track_{uuid.uuid4().hex[:6]}.xlsx"
             tk_tmp.write_bytes(await tracking.read())
             tracking_map = _parse_tracking(str(tk_tmp))
         shipping_map = None
-        if shipping:
+        if "application/json" in content_type and locals().get('ship_b64'):
+            sh_tmp = UPLOAD_DIR / f"ship_{uuid.uuid4().hex[:6]}.xlsx"
+            sh_tmp.write_bytes(base64.b64decode(ship_b64))
+            shipping_map = _parse_shipping(str(sh_tmp))
+        elif shipping:
             sh_tmp = UPLOAD_DIR / f"ship_{uuid.uuid4().hex[:6]}.xlsx"
             sh_tmp.write_bytes(await shipping.read())
             shipping_map = _parse_shipping(str(sh_tmp))
