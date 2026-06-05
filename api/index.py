@@ -1,5 +1,5 @@
 """bao Web API — FastAPI for Vercel Serverless (secure: uploads deleted after use, downloads via one-shot tokens)"""
-import base64, os, shutil, sys, uuid, zipfile
+import base64, io, os, shutil, sys, uuid, zipfile
 from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fastapi import FastAPI, UploadFile, File, Form, Request
@@ -441,3 +441,20 @@ async def dl_token(token: str):
     if not b64: return Response("Not Found or expired", status_code=404)
     return Response(content=base64.b64decode(b64), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": "attachment; filename=装箱单.xlsx"})
+
+@app.post("/api/download-zip")
+async def dl_zip(request: Request):
+    """接收 [{name, b64}] 打包成 ZIP 返回"""
+    try:
+        body = await request.json()
+        files = body.get("files", [])
+        if not files:
+            return JSONResponse({"success": False, "error": "无文件"}, 400)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for f in files:
+                zf.writestr(f.get("name", "unknown.xlsx"), base64.b64decode(f.get("b64", "")))
+        zip_b64 = base64.b64encode(buf.getvalue()).decode()
+        return JSONResponse({"success": True, "zip_b64": zip_b64})
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, 400)

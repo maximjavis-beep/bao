@@ -456,6 +456,7 @@ function doGenerateBatch() {
   document.getElementById('summary').innerHTML = '<div class="section-title section-title-bao">📊 批量生成</div><div class="info-grid"><div class="info-card"><div class="num" id="batch-ok">0</div><div class="lbl">成功</div></div><div class="info-card"><div class="num" id="batch-fail">0</div><div class="lbl">失败</div></div></div>';
 
   let okCount = 0, failCount = 0, finished = 0;
+  let batchFileB64s = [];
   let fileData = [];
 
   function updateProgress() {
@@ -475,6 +476,11 @@ function doGenerateBatch() {
     btn.disabled = false; btn.textContent = '📦 批量生成';
     document.getElementById('batch-prog').innerHTML = '✅ 完成 — ' + okCount + ' 成功, ' + failCount + ' 失败';
     toast('✓ 批量完成 — ' + okCount + '/' + total + ' 成功');
+    if (okCount > 0 && batchFileB64s.length > 0) {
+      let list = document.getElementById('batch-list');
+      list.innerHTML += '<div style="margin-top:6px"><button class="btn btn-zip" onclick="downloadBatchZipVercel()" style="font-size:11px;padding:6px 12px;width:auto;display:inline-block">📥 批量下载 ZIP ('+okCount+' 个文件)</button></div>';
+      window._batchZipFiles = batchFileB64s;
+    }
   }
 
   function processFile(fileObj, i) {
@@ -505,6 +511,7 @@ function doGenerateBatch() {
           okCount++;
           let sid = (d.summary && d.summary.shipment_id) ? d.summary.shipment_id : fileObj.name;
           appendResult({ success: true, shipment_id: sid, download_url: d.download_url });
+          if (d.file_b64) batchFileB64s.push({name: sid + '.xlsx', b64: d.file_b64});
         } else {
           failCount++;
           appendResult({ success: false, filename: fileObj.name, error: d.error || '未知错误' });
@@ -644,6 +651,7 @@ function doCustomsSummary() {
 
   let collected = [];        // 收集已解析结果（按索引存）
   let okCount = 0, failCount = 0, finished = 0;
+  let batchFileB64s = [];
   let totalAmount = 0;
   let previewHtml = '<div class="section-title">📋 报关单提取结果 <span style="font-weight:400;font-size:11px;color:#888" id="prog-text">0/' + total + '</span></div>';
   previewHtml += '<table><tr><th>#</th><th>单号</th><th>下单日期</th><th>报关单号</th><th>报关金额</th><th>币种</th><th>申报日期</th><th>抬头</th><th>来源</th></tr>';
@@ -767,6 +775,25 @@ function downloadCustomsB64(b64) {
   let url = URL.createObjectURL(blob);
   let a = document.createElement('a'); a.href=url; a.download='报关单信息汇总.xlsx'; a.click();
   URL.revokeObjectURL(url);
+}
+
+function downloadBatchZipVercel() {
+  let files = window._batchZipFiles || [];
+  if (!files.length) return;
+  fetch('/api/download-zip', {
+    method: 'POST',
+    body: JSON.stringify({files: files}),
+    headers: {'Content-Type': 'application/json'}
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success && d.zip_b64) {
+      let blob = b64ToBlob(d.zip_b64, 'application/zip');
+      let url = URL.createObjectURL(blob);
+      let a = document.createElement('a'); a.href=url; a.download='装箱单_批量.zip'; a.click();
+      URL.revokeObjectURL(url);
+    }
+  }).catch(() => {});
 }
 
 </script>
