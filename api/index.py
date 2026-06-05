@@ -2,16 +2,18 @@
 import base64, os, shutil, sys, uuid, zipfile
 from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.responses import JSONResponse, HTMLResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from bao.core.exporter import FBAExporter
+from bao.core.customs_exporter import export_customs_summary
 from bao.core.weaver import weave_fba
 import openpyxl
 from openpyxl.styles import PatternFill
+from bao.parsers.customs_pdf_parser import CustomsPDFParser
 from bao.parsers.fba_parser import FBAParser
 
-app = FastAPI(title="bao", version="0.5.5")
+app = FastAPI(title="bao", version="0.6.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 ROOT_DIR = Path(__file__).parent.parent
 UPLOAD_DIR = Path("/tmp/bao_uploads")
@@ -85,11 +87,22 @@ async def api_templates():
 async def index(): return _read_html("index_vercel.html")
 
 @app.post("/api/parse")
-async def api_parse(file: UploadFile = File(...)):
+async def api_parse(request: Request, file: UploadFile = File(None)):
     try:
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        tmp = UPLOAD_DIR / f"fba_{uuid.uuid4().hex[:6]}.xlsx"
-        tmp.write_bytes(await file.read())
+        content_type = request.headers.get("content-type", "")
+        if "application/json" in content_type:
+            body = await request.json()
+            b64 = body.get("file", "")
+            if not b64:
+                return JSONResponse({"success": False, "error": "未提供文件"}, 400)
+            tmp = UPLOAD_DIR / f"fba_{uuid.uuid4().hex[:6]}.xlsx"
+            tmp.write_bytes(base64.b64decode(b64))
+        elif file:
+            tmp = UPLOAD_DIR / f"fba_{uuid.uuid4().hex[:6]}.xlsx"
+            tmp.write_bytes(await file.read())
+        else:
+            return JSONResponse({"success": False, "error": "未提供文件"}, 400)
         data = FBAParser().parse(str(tmp)); tmp.unlink(missing_ok=True)
         items = data.get("items", [])
         return JSONResponse({"success": True, "meta": data.get("meta", {}), "items": items, "item_count": len(items)})
@@ -291,6 +304,57 @@ async def api_merge_plan(file: UploadFile = File(...), plan_file: UploadFile = F
         file_b64 = base64.b64encode(out.read_bytes()).decode()
         out.unlink(missing_ok=True)
         return JSONResponse({"success": True, "file_b64": file_b64, "matched": len(match_map), "deleted": len(deleted)})
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, 400)
+
+@app.post("/api/customs-summary")
+async def api_customs_summary(request: Request):
+    """报关单 PDF 解析并生成汇总 Excel"""
+    try:
+        body = await request.json()
+        files_data = body.get("files", [])
+        if not files_data:
+            return JSONResponse({"success": False, "error": "未上传任何 PDF 文件"}, 400)
+        parser = CustomsPDFParser()
+        items = []
+        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        for f in files_data:
+            try:
+                b64 = f.get("data", "")
+                name = f.get("name", "unknown.pdf")
+                if not b64:
+                    items.append({"error": "文件数据为空", "file": name})
+                    continue
+                pdf_path = UPLOAD_DIR / f"customs_{uuid.uuid4().hex[:6]}.pdf"
+                pdf_path.write_bytes(base64.b64decode(b64))
+                result = parser.parse(str(pdf_path))
+                result["_source"] = name
+                items.append(result)
+                pdf_path.unlink(missing_ok=True)
+            except Exception as e:
+                items.append({"error": str(e), "file": f.get("name", "unknown.pdf")})
+        file_b64 = ""
+        if any("error" not in it for it in items):
+            xlsx_bytes = export_customs_summary(items)
+            file_b64 = base64.b64encode(xlsx_bytes).decode()
+        ok_items = [it for it in items if "error" not in it]
+        total_amount = sum(it.get("报关金额", 0) or 0 for it in ok_items if isinstance(it.get("报关金额"), (int, float)))
+        currencies = list(set(it.get("币种", "") for it in ok_items if it.get("币种")))
+        return JSONResponse({"success": True, "items": items, "item_count": len(items), "ok_count": len(ok_items), "file_b64": file_b64, "stats": {"total": len(items), "ok": len(ok_items), "total_amount": round(total_amount, 2), "currencies": currencies}})
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, 400)
+
+@app.post("/api/customs-export")
+async def api_customs_export(request: Request):
+    """根据已解析的报关单数据生成汇总 Excel"""
+    try:
+        body = await request.json()
+        items = body.get("items", [])
+        if not items:
+            return JSONResponse({"success": False, "error": "无数据可导出"}, 400)
+        xlsx_bytes = export_customs_summary(items)
+        file_b64 = base64.b64encode(xlsx_bytes).decode()
+        return JSONResponse({"success": True, "file_b64": file_b64})
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, 400)
 

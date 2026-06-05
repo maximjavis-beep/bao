@@ -16,7 +16,9 @@ import openpyxl
 from openpyxl.styles import PatternFill
 
 from ..core.exporter import FBAExporter
+from ..core.customs_exporter import export_customs_summary
 from ..core.weaver import weave_fba
+from ..parsers.customs_pdf_parser import CustomsPDFParser
 from ..parsers.fba_parser import FBAParser
 
 WEB_DIR = Path(__file__).parent
@@ -65,6 +67,10 @@ class BaoHandler(BaseHTTPRequestHandler):
             self._handle_weave_batch()
         elif p == "/api/merge-plan":
             self._handle_merge_plan()
+        elif p == "/api/customs-summary":
+            self._handle_customs_summary()
+        elif p == "/api/customs-export":
+            self._handle_customs_export()
         else:
             self.send_error(404)
 
@@ -474,6 +480,75 @@ class BaoHandler(BaseHTTPRequestHandler):
                 "matched": len(match_map),
                 "deleted": len(deleted),
             })
+        except Exception as e:
+            self._json({"success": False, "error": str(e)}, 400)
+
+    def _handle_customs_summary(self):
+        """报关单 PDF 解析并生成汇总 Excel"""
+        try:
+            body = json.loads(self._read())
+            files_data = body.get("files", [])
+
+            if not files_data:
+                self._json({"success": False, "error": "未上传任何 PDF 文件"}, 400)
+                return
+
+            parser = CustomsPDFParser()
+            items = []
+            UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+            for f in files_data:
+                try:
+                    b64 = f.get("data", "")
+                    name = f.get("name", "unknown.pdf")
+                    if not b64:
+                        items.append({"error": "文件数据为空", "file": name})
+                        continue
+                    pdf_path = UPLOAD_DIR / f"customs_{uuid.uuid4().hex[:6]}.pdf"
+                    pdf_path.write_bytes(base64.b64decode(b64))
+                    result = parser.parse(str(pdf_path))
+                    result["_source"] = name
+                    items.append(result)
+                    pdf_path.unlink(missing_ok=True)
+                except Exception as e:
+                    items.append({"error": str(e), "file": f.get("name", "unknown.pdf")})
+
+            file_b64 = ""
+            if any("error" not in it for it in items):
+                xlsx_bytes = export_customs_summary(items)
+                file_b64 = base64.b64encode(xlsx_bytes).decode()
+
+            ok_items = [it for it in items if "error" not in it]
+            total_amount = sum(it.get("报关金额", 0) or 0 for it in ok_items if isinstance(it.get("报关金额"), (int, float)))
+            currencies = list(set(it.get("币种", "") for it in ok_items if it.get("币种")))
+
+            self._json({
+                "success": True,
+                "items": items,
+                "item_count": len(items),
+                "ok_count": len(ok_items),
+                "file_b64": file_b64,
+                "stats": {
+                    "total": len(items),
+                    "ok": len(ok_items),
+                    "total_amount": round(total_amount, 2),
+                    "currencies": currencies,
+                },
+            })
+        except Exception as e:
+            self._json({"success": False, "error": str(e)}, 400)
+
+    def _handle_customs_export(self):
+        """根据已解析的报关单数据生成汇总 Excel"""
+        try:
+            body = json.loads(self._read())
+            items = body.get("items", [])
+            if not items:
+                self._json({"success": False, "error": "无数据可导出"}, 400)
+                return
+            xlsx_bytes = export_customs_summary(items)
+            file_b64 = base64.b64encode(xlsx_bytes).decode()
+            self._json({"success": True, "file_b64": file_b64})
         except Exception as e:
             self._json({"success": False, "error": str(e)}, 400)
 

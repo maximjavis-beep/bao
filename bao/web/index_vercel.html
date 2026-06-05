@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html lang="zh">
 <head>
-<meta charset="UTF-8"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>bao — 出口报关文件编织助手</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -14,7 +15,7 @@ body{font:13px/1.5 -apple-system,system-ui,sans-serif;background:#f5f7fa;height:
 .top-left{display:flex;flex-direction:column;gap:6px;width:260px;flex-shrink:0}
 .top-center{flex:1;overflow-y:auto;max-height:160px}
 .top-right{width:200px;flex-shrink:0}
-.section-title{font-size:12px;font-weight:700;color:#555;margin-bottom:4px;padding-bottom:3px;border-bottom:2px solid #e67e22;text-transform:uppercase;letter-spacing:.5px}
+.section-title{font-size:12px;font-weight:700;color:#555;margin-bottom:4px;padding-bottom:3px;border-bottom:2px solid #e67e22;text-transform:uppercase;letter-spacing:0.5px}
 .section-title-bao{border-bottom-color:#4a90d9}
 .upload-zone{border:2px dashed #c0c0c0;border-radius:6px;padding:12px 10px;text-align:center;cursor:pointer;transition:all .2s}
 .upload-zone:hover,.upload-zone.active{border-color:#e67e22;background:#fff8f0}
@@ -33,10 +34,10 @@ body{font:13px/1.5 -apple-system,system-ui,sans-serif;background:#f5f7fa;height:
 .file-badge{display:flex;align-items:center;gap:6px;padding:5px 8px;background:#e8f4ff;border-radius:4px;font-size:11px;margin-bottom:3px}
 .file-badge .idx{color:#4a90d9;font-weight:600;min-width:16px}
 .file-badge .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.file-badge .remove{cursor:pointer;color:#999;margin-left:4px}
+.file-badge .remove{cursor:pointer;color:#999}
 .btn-primary{background:#4a90d9;color:#fff}.btn-primary:hover{background:#357abd}.btn-primary:disabled{background:#ccc;cursor:not-allowed}
 .btn-batch{background:#8e44ad;color:#fff;margin-top:3px}.btn-batch:hover{background:#71368a}.btn-batch:disabled{background:#ccc;cursor:not-allowed}
-.btn-zip{background:#e67e22;color:#fff;text-decoration:none;display:inline-block;padding:6px 12px;font-size:12px;border-radius:4px}.btn-zip:hover{background:#d35400}
+.btn-zip{background:#e67e22;color:#fff;text-decoration:none}.btn-zip:hover{background:#d35400}
 .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
 .info-card{background:#f8faff;border-radius:4px;padding:8px 10px;text-align:center}
 .info-card .num{font-size:18px;font-weight:700;color:#4a90d9}
@@ -56,111 +57,718 @@ tr:hover td{background:#f8faff}
 .spinner{display:inline-block;width:20px;height:20px;border:3px solid #ddd;border-top-color:#4a90d9;border-radius:50%;animation:spin .6s linear infinite;margin-right:8px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .batch-result{margin-top:6px;max-height:200px;overflow-y:auto}
-.batch-result .ok{color:#27ae60}.batch-result .fail{color:#e74c3c}
+.batch-result .ok{color:#27ae60}
+.batch-result .fail{color:#e74c3c}
 .plan-info{font-size:11px;color:#888;margin-top:2px}
 </style>
 </head>
 <body>
-<div class="header"><h1>📦 bao</h1><span class="ver">v0.5.5</span></div>
-<div class="top-section">
-<div class="top-left">
-<div class="section-title">📋 调整明细 → 发货计划</div>
-<label class="upload-zone" id="plan-drop-zone"><input type="file" id="plan-file-input" accept=".xlsx" onchange="handlePlanFile(this)"><div class="icon">📁</div><div class="text">1. 上传调整明细</div></label>
-<div class="plan-info" id="plan-file-info"></div>
-<label class="upload-zone" id="adj-plan-drop-zone" style="margin-top:4px"><input type="file" id="adj-plan-file-input" accept=".xlsx" onchange="handleAdjPlanFile(this)"><div class="icon">📋</div><div class="text">2. 上传发货计划</div></label>
-<div class="plan-info" id="adj-plan-file-info"></div>
-<button class="btn btn-plan" id="plan-gen-btn" disabled onclick="doMergePlan()">🔀 生成调整后发货计划</button>
-<a class="btn btn-dl" id="plan-dl-btn" href="#" style="display:none">⬇ 下载结果</a>
-</div>
-<div class="top-center" id="plan-preview"><div class="empty"><div class="icon">📋</div>上传后点击生成</div></div>
-<div class="top-right" id="plan-summary"><div class="section-title">📊 映射统计</div><div class="empty">等待上传…</div></div>
-</div>
-<div class="section-divider"></div>
-<div class="main-section">
-<div class="panel panel-left">
-<div class="section-title section-title-bao">📤 FBA 装箱单生成</div>
-<label class="upload-zone upload-zone-bao" id="drop-zone"><input type="file" id="file-input" accept=".xlsx" multiple onchange="handleFiles(this)"><div class="icon">📁</div><div class="text">拖拽或点击上传 FBA 货件</div></label>
-<div class="file-list" id="file-list"></div>
-<div class="tpl-select-row" style="margin-top:4px;display:flex;align-items:center;gap:6px"><span style="font-size:12px;color:#888">常用模板：</span><select id="template-select" onchange="onTemplateSelect(this)" style="flex:1;padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px"><option value="">-- 不上传（使用默认蜡烛模板）--</option></select></div>
-<label class="upload-zone" id="tpl-drop-zone" style="border-color:#8e44ad;margin-top:4px"><input type="file" id="tpl-file-input" accept=".xlsx" onchange="handleTplFile(this)"><div class="icon">📐</div><div class="text">可选：上传自定义模板</div></label>
-<div class="plan-info" id="tpl-file-info"></div>
-<label class="upload-zone" id="track-drop-zone" style="border-color:#e67e22;margin-top:4px"><input type="file" id="track-file-input" accept=".xlsx" onchange="handleTrackFile(this)"><div class="icon">🔗</div><div class="text">可选：货件追踪码</div></label>
-<div class="plan-info" id="track-file-info"></div>
-<div class="hs-row"><label>HS编码：</label><input type="text" id="hs-code" placeholder="自动匹配"></div>
-<button class="btn btn-primary" id="gen-btn" disabled onclick="doGenerateSingle()">🧵 单件生成</button>
-<a class="btn btn-dl btn-download" id="dl-btn" style="display:none" href="#">⬇ 装箱单</a>
-<button class="btn btn-batch" id="gen-batch-btn" disabled onclick="doGenerateBatch()">📦 批量生成</button>
 
+<div class="header">
+  <h1>📦 bao</h1>
+  <span class="ver">v0.6.0 — 出口报关文件编织助手</span>
 </div>
-<div class="panel panel-center" id="preview"><div class="empty"><div class="icon">📋</div>上传 FBA 货件 Excel 开始</div></div>
-<div class="panel panel-right" id="summary"><div class="section-title section-title-bao">📊 货件信息</div><div class="empty">等待上传…</div></div>
+
+<!-- ====== 上屏：调整明细 → 发货计划 ====== -->
+<div class="top-section">
+  <div class="top-left">
+    <div class="section-title">📋 调整明细 → 发货计划</div>
+    <label class="upload-zone" id="plan-drop-zone">
+      <input type="file" id="plan-file-input" accept=".xlsx" onchange="handlePlanFile(this)">
+      <div class="icon">📁</div>
+      <div class="text">1. 上传调整明细</div>
+    </label>
+    <div class="plan-info" id="plan-file-info"></div>
+    <label class="upload-zone" id="adj-plan-drop-zone" style="margin-top:4px">
+      <input type="file" id="adj-plan-file-input" accept=".xlsx" onchange="handleAdjPlanFile(this)">
+      <div class="icon">📋</div>
+      <div class="text">2. 上传发货计划</div>
+    </label>
+    <div class="plan-info" id="adj-plan-file-info"></div>
+    <button class="btn btn-plan" id="plan-gen-btn" disabled onclick="doMergePlan()">🔀 生成调整后发货计划</button>
+    <a class="btn btn-dl" id="plan-dl-btn" href="javascript:void(0)" download>⬇ 下载结果</a>
+  </div>
+  <div class="top-center" id="plan-preview">
+    <div class="empty"><div class="icon">📋</div>上传调整明细后在此预览映射结果</div>
+  </div>
+  <div class="top-right" id="plan-summary">
+    <div class="section-title">📊 映射统计</div>
+    <div class="empty">等待上传…</div>
+  </div>
 </div>
+
+<div class="section-divider"></div>
+
+<!-- ====== 下屏：Tab 切换 ====== -->
+<div class="main-section" style="flex-direction:column">
+  <div class="tab-bar" style="display:flex;background:#eef1f5;padding:0 12px;flex-shrink:0">
+    <button class="tab-btn active" id="tab-fba" onclick="switchTab('fba')" style="padding:8px 20px;border:none;background:transparent;font-size:13px;font-weight:600;color:#4a90d9;border-bottom:3px solid #4a90d9;cursor:pointer">📤 FBA 装箱单生成</button>
+    <button class="tab-btn" id="tab-customs" onclick="switchTab('customs')" style="padding:8px 20px;border:none;background:transparent;font-size:13px;font-weight:600;color:#888;border-bottom:3px solid transparent;cursor:pointer">🛃 报关单信息汇总</button>
+  </div>
+  <div id="fba-panels" style="display:flex;flex:1;overflow:hidden">
+    <div class="panel panel-left">
+      <div class="section-title section-title-bao">📤 FBA 装箱单生成</div>
+      <label class="upload-zone upload-zone-bao" id="drop-zone">
+        <input type="file" id="file-input" accept=".xlsx" multiple onchange="handleFiles(this)">
+        <div class="icon">📁</div>
+        <div class="text">拖拽或点击上传 FBA 货件</div>
+      </label>
+      <div class="file-list" id="file-list"></div>
+      <div class="tpl-select-row" style="margin-top:4px;display:flex;align-items:center;gap:6px">
+        <span style="font-size:12px;color:#888">常用模板：</span>
+        <select id="template-select" onchange="onTemplateSelect(this)" style="flex:1;padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px">
+          <option value="">-- 不上传（使用默认蜡烛模板）--</option>
+        </select>
+      </div>
+      <label class="upload-zone" id="tpl-drop-zone" style="border-color:#8e44ad;margin-top:4px">
+        <input type="file" id="tpl-file-input" accept=".xlsx" onchange="handleTplFile(this)">
+        <div class="icon">📐</div>
+        <div class="text">可选：上传自定义模板</div>
+      </label>
+      <div class="plan-info" id="tpl-file-info"></div>
+      <label class="upload-zone" id="track-drop-zone" style="border-color:#e67e22;margin-top:4px">
+        <input type="file" id="track-file-input" accept=".xlsx" onchange="handleTrackFile(this)">
+        <div class="icon">🔗</div>
+        <div class="text">可选：上传货件追踪码</div>
+      </label>
+      <div class="plan-info" id="track-file-info"></div>
+      <div class="hs-row">
+        <label>HS编码：</label>
+        <input type="text" id="hs-code" placeholder="自动匹配（蜡烛:3406000090）">
+      </div>
+      <button class="btn btn-primary" id="gen-btn" disabled onclick="doGenerateSingle()">🧵 单件生成</button>
+      <a class="btn btn-dl btn-download" id="dl-btn" style="display:none" href="javascript:void(0)" download>⬇ 下载装箱单</a>
+      <button class="btn btn-batch" id="gen-batch-btn" disabled onclick="doGenerateBatch()">📦 批量生成</button>
+      <div class="batch-result" id="batch-result"></div>
+    </div>
+    <div class="panel panel-center" id="preview">
+      <div class="empty"><div class="icon">📋</div>上传 FBA 货件 Excel 开始</div>
+    </div>
+    <div class="panel panel-right" id="summary">
+      <div class="section-title section-title-bao">📊 货件信息</div>
+      <div class="empty">等待上传…</div>
+    </div>
+  </div>
+  <div id="customs-panels" style="display:none;flex:1;overflow:hidden">
+    <div class="panel panel-left">
+      <div class="section-title section-title-bao">🛃 报关单信息汇总</div>
+      <label class="upload-zone upload-zone-bao" id="customs-drop-zone">
+        <input type="file" id="customs-file-input" accept=".pdf" multiple onchange="handleCustomsFiles(this)">
+        <div class="icon">📄</div>
+        <div class="text">拖拽或点击上传报关单 PDF</div>
+      </label>
+      <div class="file-list" id="customs-file-list"></div>
+      <button class="btn btn-primary" id="customs-gen-btn" disabled onclick="doCustomsSummary()" style="margin-top:8px">🧵 生成汇总 Excel</button>
+      <a class="btn btn-dl btn-download" id="customs-dl-btn" style="display:none;margin-top:4px" href="javascript:void(0)" download>⬇ 下载汇总 Excel</a>
+    </div>
+    <div class="panel panel-center" id="customs-preview">
+      <div class="empty"><div class="icon">🛃</div>上传报关单 PDF 开始解析</div>
+    </div>
+    <div class="panel panel-right" id="customs-summary-stats">
+      <div class="section-title section-title-bao">📊 汇总统计</div>
+      <div class="empty">等待上传…</div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
+
 <script>
-let state={files:[],parsed:null,planFile:null,adjPlanFile:null,templateFile:null,trackingFile:null,templateId:''},toastTimer;
-let pdz=document.getElementById('plan-drop-zone');
-pdz.addEventListener('dragover',e=>{e.preventDefault();pdz.classList.add('active')});
-pdz.addEventListener('dragleave',()=>pdz.classList.remove('active'));
-pdz.addEventListener('drop',e=>{e.preventDefault();pdz.classList.remove('active');document.getElementById('plan-file-input').files=e.dataTransfer.files;handlePlanFile(document.getElementById('plan-file-input'))});
-function handlePlanFile(i){if(i.files.length===0)return;state.planFile=i.files[0];document.getElementById('plan-file-info').textContent='✓ '+esc(state.planFile.name);checkPlanReady()}
-function handleAdjPlanFile(i){if(i.files.length===0)return;state.adjPlanFile=i.files[0];document.getElementById('adj-plan-file-info').textContent='✓ '+esc(state.adjPlanFile.name);checkPlanReady()}
-function checkPlanReady(){document.getElementById('plan-gen-btn').disabled=!(state.planFile&&state.adjPlanFile)}
-function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}
-function handleTplFile(i){if(i.files.length===0)return;state.templateFile=i.files[0];document.getElementById('tpl-file-info').textContent='✓ '+esc(state.templateFile.name)}function handleTrackFile(i){if(i.files.length===0)return;state.trackingFile=i.files[0];document.getElementById('track-file-info').textContent='✓ '+esc(state.trackingFile.name)}
-function doMergePlan(){
-if(!state.planFile||!state.adjPlanFile)return toast('请先上传两个文件',true);
-let btn=document.getElementById('plan-gen-btn');btn.disabled=true;btn.textContent='⏳ 调整中…';
-let fd=new FormData();fd.append('file',state.planFile);fd.append('plan_file',state.adjPlanFile);
-fetch('/api/merge-plan',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{
-btn.disabled=false;btn.textContent='🔀 生成调整后发货计划';
-if(!d.success){toast('失败: '+d.error,true);return}
-downloadB64(d.file_b64,'发货计划调整.xlsx');
-let dl=document.getElementById('plan-dl-btn');dl.onclick=function(){downloadB64(d.file_b64,'发货计划调整.xlsx')};dl.href='javascript:void(0)';dl.style.display='block';dl.textContent='⬇ 重新下载';
-toast('✓ 匹配'+(d.matched||0)+'组,删除'+(d.deleted||0)+'行');
-}).catch(function(){btn.disabled=false;btn.textContent='🔀 生成';toast('失败',true)})}
-let dz=document.getElementById('drop-zone');
-dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('active')});
-dz.addEventListener('dragleave',()=>dz.classList.remove('active'));
-dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('active');document.getElementById('file-input').files=e.dataTransfer.files;handleFiles(document.getElementById('file-input'))});
-function toast(m,e){let t=document.getElementById('toast');t.textContent=m;t.className='toast '+(e?'toast-error':'toast-info');t.style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.style.display='none',3000)}
-function handleFiles(i){state.files=Array.from(i.files);renderFileList();if(state.files.length===1)parseSingle(state.files[0]);else if(state.files.length>1){document.getElementById('gen-btn').disabled=true;document.getElementById('gen-batch-btn').disabled=false;document.getElementById('preview').innerHTML='<div class="empty"><div class="icon">📁</div>已选择 '+state.files.length+' 个文件</div>';document.getElementById('summary').innerHTML='<div class="section-title section-title-bao">📊 货件信息</div><div class="empty">'+state.files.length+' 个文件待处理</div>'}}
-function renderFileList(){let h='';state.files.forEach((f,i)=>{h+='<div class="file-badge"><span class="idx">'+(i+1)+'</span><span class="name">'+esc(f.name)+'</span><span class="remove" onclick="removeFile('+i+')">✕</span></div>'});document.getElementById('file-list').innerHTML=h}
-function removeFile(i){state.files.splice(i,1);let dt=new DataTransfer();state.files.forEach(f=>dt.items.add(f));document.getElementById('file-input').files=dt.files;renderFileList();if(state.files.length===0)clearAll();else if(state.files.length===1)parseSingle(state.files[0])}
-function parseSingle(f){document.getElementById('preview').innerHTML='<div class="loading"><span class="spinner"></span>解析中…</div>';document.getElementById('gen-btn').disabled=true;document.getElementById('gen-batch-btn').disabled=true;document.getElementById('dl-btn').style.display='none';let fd=new FormData();fd.append('file',f);fetch('/api/parse',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{if(!d.success){toast(d.error,true);document.getElementById('preview').innerHTML='<div class="empty"><div class="icon">❌</div>'+d.error+'</div>';return}state.parsed=d;showPreview(d);showSummary(d);document.getElementById('gen-btn').disabled=false;document.getElementById('gen-batch-btn').disabled=false;toast('✓ '+d.item_count+' SKU')}).catch(function(e){toast('上传失败: '+e.message,true)})}
-function clearAll(){state={files:[],parsed:null,templateFile:state.templateFile,trackingFile:state.trackingFile,templateId:state.templateId};document.getElementById('file-list').innerHTML='';document.getElementById('file-input').value='';document.getElementById('gen-btn').disabled=true;document.getElementById('gen-batch-btn').disabled=true;document.getElementById('dl-btn').style.display='none';clearBatch();document.getElementById('preview').innerHTML='<div class="empty"><div class="icon">📋</div>上传 FBA 货件 Excel 开始</div>';document.getElementById('summary').innerHTML='<div class="section-title section-title-bao">📊 货件信息</div><div class="empty">等待上传…</div>'}
-function showPreview(d){let h='<div class="section-title">📋 SKU 明细</div>';if(!d.items||d.items.length===0)h+='<div class="empty">无数据</div>';else{h+='<table><tr><th>MSKU</th><th>箱数</th><th>申报量</th><th>箱号</th><th>重量</th><th>尺寸</th></tr>';d.items.forEach(i=>{h+='<tr><td>'+esc(i.msku)+'</td><td>'+i.box_count+'</td><td>'+i.declared_qty+'</td><td>'+esc(i.box_range)+'</td><td>'+i.weight+'</td><td>'+i.length+'×'+i.width+'×'+i.height+'</td></tr>'});h+='</table>'}document.getElementById('preview').innerHTML=h}
-function showSummary(d){let m=d.meta||{},h='<div class="section-title section-title-bao">📊 货件信息</div><div class="info-grid">';h+='<div class="info-card"><div class="num">'+(m.total_boxes||'-')+'</div><div class="lbl">箱子数量</div></div>';h+='<div class="info-card"><div class="num">'+(d.item_count||'-')+'</div><div class="lbl">SKU 数</div></div>';h+='<div class="info-card"><div class="num">'+(m.item_count||'-')+'</div><div class="lbl">商品数量</div></div>';h+='</div>';if(m.shipment_id)h+='<div style="padding:6px;background:#f0f6ff;border-radius:4px"><span style="color:#888;font-size:11px">货件编号</span><br><b>'+esc(m.shipment_id)+'</b></div>';document.getElementById('summary').innerHTML=h}
-function doGenerateSingle(){if(state.files.length===0)return toast('请先上传',true);let btn=document.getElementById('gen-btn');btn.disabled=true;btn.textContent='⏳ 生成中…';let fd=new FormData();fd.append('file',state.files[0]);if(state.templateFile)fd.append('template',state.templateFile);else if(state.templateId)fd.append('template_id',state.templateId);if(state.trackingFile)fd.append('tracking',state.trackingFile);let hs=document.getElementById('hs-code').value.trim();if(hs)fd.append('hs_code',hs);fetch('/api/weave',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{btn.disabled=false;btn.textContent='🧵 单件生成';if(!d.success){toast(d.error,true);return}let dl=document.getElementById('dl-btn');dl.onclick=function(){downloadB64(d.file_b64,'装箱单.xlsx')};dl.href='javascript:void(0)';dl.style.display='block';dl.textContent='⬇ 重新下载';try{downloadB64(d.file_b64,'装箱单.xlsx')}catch(e){dl.textContent='⬇ 下载装箱单';toast('自动下载失败，请点击按钮下载',true)}showResultSummary(d);showResultRows(d);toast('✓ 生成完成')}).catch(function(e){btn.disabled=false;btn.textContent='🧵 单件生成';toast(e.message,true)})}
-function doGenerateBatch(){if(state.files.length===0)return toast('请先上传',true);let fd=new FormData();state.files.forEach(f=>fd.append('files',f));if(state.templateFile)fd.append('template',state.templateFile);else if(state.templateId)fd.append('template_id',state.templateId);if(state.trackingFile)fd.append('tracking',state.trackingFile);let hs=document.getElementById('hs-code').value.trim();if(hs)fd.append('hs_code',hs);let btn=document.getElementById('gen-batch-btn');btn.disabled=true;btn.textContent='⏳ 批量中…';fetch('/api/weave-batch',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{btn.disabled=false;btn.textContent='📦 批量生成';if(!d.success){toast(d.error,true);return}showBatchResult(d);toast('v0.5.5 批量OK: '+d.results.filter(function(r){return r.success}).length+'/'+d.results.length)}).catch(function(e){btn.disabled=false;btn.textContent='📦 批量生成';toast(e.message,true)})}
-window._batchData=null;
-function showBatchResult(d){
-  window._batchData=d;
-  var okN=d.results.filter(function(r){return r.success}).length;
-  var h='<div class="section-title section-title-bao">📊 批量生成 ('+okN+'/'+d.results.length+')</div>';
-  if(d.zip_b64){
-    h+='<a class="btn btn-zip" href="javascript:void(0)" id="batch-zip-btn" style="margin:4px 0;display:inline-block">📥 批量下载 ZIP</a>';
-  }
-  h+='<div style="margin-top:4px;max-height:300px;overflow-y:auto">';
-  d.results.forEach(function(r,i){
-    if(r.success) h+='<div style="font-size:11px;padding:2px 0"><span class="ok">✓</span> '+esc(r.shipment_id)+' <a href="javascript:void(0)" class="batch-dl-link" data-idx="'+i+'" style="color:#4a90d9;font-size:10px">下载</a></div>';
-    else h+='<div style="font-size:11px;padding:2px 0"><span class="fail">✗</span> '+esc(r.filename)+'</div>'
-  });
-  h+='</div>';
-  document.getElementById('summary').innerHTML=h;
-  var zb=document.getElementById('batch-zip-btn');
-  if(zb)zb.onclick=function(e){e.preventDefault();downloadZipB64(d.zip_b64)};
-  document.querySelectorAll('.batch-dl-link').forEach(function(a){
-    var idx=parseInt(a.getAttribute('data-idx'));
-    a.onclick=function(e){e.preventDefault();var r=window._batchData.results[idx];if(r&&r.file_b64)downloadB64(r.file_b64,r.shipment_id+'-装箱单.xlsx')}
-  })
+let state = { files: [], parsed: null, woven: null, batchResult: null, planFile: null, adjPlanFile: null, templateFile: null, trackingFile: null, shippingFile: null, templateId: '' };
+let toastTimer;
+
+// ====== 上屏：调整明细 → 发货计划 ======
+let pdz = document.getElementById('plan-drop-zone');
+pdz.addEventListener('dragover', e => { e.preventDefault(); pdz.classList.add('active'); });
+pdz.addEventListener('dragleave', () => pdz.classList.remove('active'));
+pdz.addEventListener('drop', e => {
+  e.preventDefault(); pdz.classList.remove('active');
+  document.getElementById('plan-file-input').files = e.dataTransfer.files;
+  handlePlanFile(document.getElementById('plan-file-input'));
+});
+
+function handlePlanFile(input) {
+  if (input.files.length === 0) return;
+  state.planFile = input.files[0];
+  document.getElementById('plan-file-info').textContent = '✓ ' + esc(state.planFile.name);
+  checkPlanReady();
 }
-function clearBatch(){window._batchData=null}
-function showResultSummary(d){let s=d.summary||{},h='<div class="section-title section-title-bao">📊 生成结果</div><div class="info-grid">';h+='<div class="info-card"><div class="num">'+(s.total_boxes||'-')+'</div><div class="lbl">总箱数</div></div>';h+='<div class="info-card"><div class="num">'+(s.total_weight||'-')+'</div><div class="lbl">总重量 kg</div></div>';h+='<div class="info-card"><div class="num">'+(s.total_cbm||'-')+'</div><div class="lbl">总体积 CBM</div></div>';h+='</div>';if(s.shipment_id)h+='<div style="padding:6px;background:#eafaf1;border-radius:4px;font-size:11px;color:#666">Shipment ID: <b>'+esc(s.shipment_id)+'</b></div>';document.getElementById('summary').innerHTML=h}
-function showResultRows(d){let rows=d.rows||[],h='<div class="section-title">📋 装箱单明细</div><table><tr><th>箱号段</th><th>件数</th><th>SKU</th><th>HS</th><th>数量</th><th>重量</th><th>尺寸</th></tr>';rows.forEach(r=>{h+='<tr><td>'+esc(r['箱号段'])+'</td><td>'+r['总件数']+'</td><td>'+esc(r['SKU'])+'</td><td>'+esc(r['海关编码'])+'</td><td>'+r['总数量']+'</td><td>'+r['单箱重量']+'</td><td>'+r['长']+'×'+r['宽']+'×'+r['高']+'</td></tr>'});h+='</table>';document.getElementById('preview').innerHTML=h}
-function downloadB64(b64,filename){var raw=atob(b64),arr=new Uint8Array(raw.length);for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);var blob=new Blob([arr],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),url=URL.createObjectURL(blob);var isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent);if(isIOS){window.location.href=url}else{var a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();document.body.removeChild(a)}setTimeout(function(){URL.revokeObjectURL(url)},60000)}
-function downloadZipB64(b64){try{let raw=atob(b64),arr=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);let blob=new Blob([arr],{type:'application/zip'}),url=URL.createObjectURL(blob);var isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent);if(isIOS){window.location.href=url;return}let a=document.createElement('a');a.href=url;a.download='装箱单_批量.zip';document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(url)},60000)}catch(e){alert('ZIP下载失败: '+e.message+'\n\nb64长度:'+(b64?b64.length:'null'));toast('下载失败: '+e.message,true)}}
-function onTemplateSelect(sel){state.templateId=sel.value;if(state.templateId){document.getElementById('tpl-file-info').textContent='✓ 已选：'+sel.options[sel.selectedIndex].text}else{document.getElementById('tpl-file-info').textContent=''}}
-fetch('/api/templates').then(r=>r.json()).then(d=>{if(d.success){var sel=document.getElementById('template-select');d.templates.forEach(t=>{var o=document.createElement('option');o.value=t.id;o.textContent=t.name;sel.appendChild(o)})}});
+
+function handleAdjPlanFile(input) {
+  if (input.files.length === 0) return;
+  state.adjPlanFile = input.files[0];
+  document.getElementById('adj-plan-file-info').textContent = '✓ ' + esc(state.adjPlanFile.name);
+  checkPlanReady();
+}
+
+function checkPlanReady() {
+  document.getElementById('plan-gen-btn').disabled = !(state.planFile && state.adjPlanFile);
+}
+
+function doMergePlan() {
+  if (!state.planFile || !state.adjPlanFile) return toast('请先上传调整明细和发货计划', true);
+  let btn = document.getElementById('plan-gen-btn');
+  btn.disabled = true; btn.textContent = '⏳ 生成中…';
+
+  let r1 = new FileReader();
+  r1.onload = () => {
+    let b64_adj = r1.result.split(',')[1];
+    let r2 = new FileReader();
+    r2.onload = () => {
+      let b64_plan = r2.result.split(',')[1];
+      fetch('/api/merge-plan', {
+        method: 'POST',
+        body: JSON.stringify({ file: b64_adj, plan_file: b64_plan }),
+      headers: {'Content-Type': 'application/json'}
+    })
+    .then(res => res.json())
+    .then(d => {
+      btn.disabled = false; btn.textContent = '🔀 生成调整后发货计划';
+      if (!d.success) { toast('生成失败: ' + d.error, true); return; }
+      let dl = document.getElementById('plan-dl-btn');
+      dl.href = d.download_url;
+      dl.download = d.download_url.split('/').pop();
+      dl.style.display = 'block';
+      dl.textContent = '⬇ 下载发货计划';
+      toast('✓ 调整完成 — 匹配' + (d.matched||0) + '组, 删除' + (d.deleted||0) + '行');
+      document.getElementById('plan-summary').innerHTML =
+        '<div class="section-title">📊 映射统计</div>' +
+        '<div class="info-grid"><div class="info-card"><div class="num" style="color:#e67e22">' + (d.matched||'-') + '</div><div class="lbl">匹配组</div></div><div class="info-card"><div class="num">' + (d.deleted||'-') + '</div><div class="lbl">删除行</div></div></div>';
+      document.getElementById('plan-preview').innerHTML =
+        '<div class="empty"><div class="icon" style="font-size:28px">✅</div>调整完成<br><span style="font-size:11px;color:#888">匹配' + (d.matched||0) + '组, 删除' + (d.deleted||0) + '行</span></div>';
+    })
+    .catch(e => { btn.disabled = false; btn.textContent = '🔀 生成调整后发货计划'; toast('生成失败', true); });
+    };
+    r2.readAsDataURL(state.adjPlanFile);
+  };
+  r1.readAsDataURL(state.planFile);
+}
+
+// ====== 下屏：FBA 装箱单 ======
+let dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('active'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('active'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('active');
+  document.getElementById('file-input').files = e.dataTransfer.files;
+  handleFiles(document.getElementById('file-input'));
+});
+
+function handleTplFile(input) {
+  if (input.files.length === 0) return;
+  state.templateFile = input.files[0];
+  document.getElementById('tpl-file-info').textContent = '✓ ' + esc(state.templateFile.name);
+}
+
+function handleTrackFile(input) {
+  if (input.files.length === 0) return;
+  state.trackingFile = input.files[0];
+  document.getElementById('track-file-info').textContent = '✓ ' + esc(state.trackingFile.name);
+}
+
+function handleShipFile(input) {
+  if (input.files.length === 0) return;
+  state.shippingFile = input.files[0];
+  document.getElementById('ship-file-info').textContent = '✓ ' + esc(state.shippingFile.name);
+}
+
+function toast(msg, isError) {
+  let t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast ' + (isError ? 'toast-error' : 'toast-info');
+  t.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.style.display = 'none', 3000);
+}
+
+function readTplThen(fn) {
+  if (!state.templateFile) { fn(); return; }
+  let r = new FileReader();
+  r.onload = () => { fn(r.result.split(',')[1]); };
+  r.readAsDataURL(state.templateFile);
+}
+
+function readTrackingThen(fn) {
+  if (!state.trackingFile) { fn(); return; }
+  let r = new FileReader();
+  r.onload = () => { fn(r.result.split(',')[1]); };
+  r.readAsDataURL(state.trackingFile);
+}
+
+function readShipThen(fn) {
+  if (!state.shippingFile) { fn(); return; }
+  let r = new FileReader();
+  r.onload = () => { fn(r.result.split(',')[1]); };
+  r.readAsDataURL(state.shippingFile);
+}
+
+function readFile(file, cb) {
+  let r = new FileReader();
+  r.onload = () => cb(r.result.split(',')[1]);
+  r.readAsDataURL(file);
+}
+
+function handleFiles(input) {
+  state.files = Array.from(input.files);
+  renderFileList();
+  if (state.files.length === 1) {
+    parseSingle(state.files[0]);
+  } else if (state.files.length > 1) {
+    document.getElementById('gen-btn').disabled = true;
+    document.getElementById('gen-batch-btn').disabled = false;
+    document.getElementById('preview').innerHTML = '<div class="empty"><div class="icon">📁</div>已选择 ' + state.files.length + ' 个文件<br><span style="font-size:12px;color:#aaa">点击「批量生成」处理全部</span></div>';
+    document.getElementById('summary').innerHTML = '<div class="section-title section-title-bao">📊 货件信息</div><div class="empty">' + state.files.length + ' 个文件待处理</div>';
+  }
+}
+
+function renderFileList() {
+  let html = '';
+  state.files.forEach((f, i) => {
+    html += '<div class="file-badge"><span class="idx">' + (i+1) + '</span><span class="name" title="' + esc(f.name) + '">' + esc(f.name) + '</span><span class="remove" onclick="removeFile(' + i + ')">✕</span></div>';
+  });
+  document.getElementById('file-list').innerHTML = html;
+}
+
+function removeFile(idx) {
+  state.files.splice(idx, 1);
+  let dt = new DataTransfer();
+  state.files.forEach(f => dt.items.add(f));
+  document.getElementById('file-input').files = dt.files;
+  renderFileList();
+  if (state.files.length === 0) clearAll();
+  else if (state.files.length === 1) parseSingle(state.files[0]);
+}
+
+function parseSingle(file) {
+  document.getElementById('preview').innerHTML = '<div class="loading"><span class="spinner"></span>解析中…</div>';
+  document.getElementById('gen-btn').disabled = true;
+  document.getElementById('gen-batch-btn').disabled = true;
+  document.getElementById('dl-btn').style.display = 'none';
+  document.getElementById('batch-result').innerHTML = '';
+
+  readFile(file, b64 => {
+    fetch('/api/parse', {
+      method: 'POST',
+      body: JSON.stringify({ file: b64 }),
+      headers: {'Content-Type': 'application/json'}
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (!d.success) {
+        toast('解析失败: ' + d.error, true);
+        document.getElementById('preview').innerHTML = '<div class="empty"><div class="icon">❌</div>' + d.error + '</div>';
+        return;
+      }
+      state.parsed = d;
+      showPreview(d);
+      showSummary(d);
+      document.getElementById('gen-btn').disabled = false;
+      document.getElementById('gen-batch-btn').disabled = false;
+      toast('✓ 解析成功 — ' + d.item_count + ' 个 SKU');
+    })
+    .catch(e => { toast('上传失败', true); document.getElementById('preview').innerHTML = '<div class="empty"><div class="icon">❌</div>上传失败</div>'; });
+  });
+}
+
+function clearAll() {
+  state = { files: [], parsed: null, woven: null, batchResult: null, templateFile: state.templateFile, trackingFile: state.trackingFile, shippingFile: state.shippingFile, templateId: state.templateId };
+  document.getElementById('file-list').innerHTML = '';
+  document.getElementById('file-input').value = '';
+  document.getElementById('gen-btn').disabled = true;
+  document.getElementById('gen-batch-btn').disabled = true;
+  document.getElementById('dl-btn').style.display = 'none';
+  document.getElementById('batch-result').innerHTML = '';
+  document.getElementById('preview').innerHTML = '<div class="empty"><div class="icon">📋</div>上传 FBA 货件 Excel 开始</div>';
+  document.getElementById('summary').innerHTML = '<div class="section-title section-title-bao">📊 货件信息</div><div class="empty">等待上传…</div>';
+}
+
+function showPreview(d) {
+  let html = '<div class="section-title">📋 SKU 明细</div>';
+  if (!d.items || d.items.length === 0) { html += '<div class="empty">无数据</div>'; }
+  else {
+    html += '<table><tr><th>MSKU</th><th>箱数</th><th>申报量</th><th>箱号</th><th>重量</th><th>尺寸(cm)</th></tr>';
+    d.items.forEach(i => {
+      html += '<tr><td>' + esc(i.msku) + '</td><td>' + i.box_count + '</td><td>' + i.declared_qty + '</td><td>' + esc(i.box_range) + '</td><td>' + i.weight + '</td><td>' + i.length + '×' + i.width + '×' + i.height + '</td></tr>';
+    });
+    html += '</table>';
+  }
+  document.getElementById('preview').innerHTML = html;
+}
+
+function showSummary(d) {
+  let m = d.meta || {};
+  let html = '<div class="section-title section-title-bao">📊 货件信息</div>';
+  html += '<div class="info-grid">';
+  html += '<div class="info-card"><div class="num">' + (m.total_boxes||'-') + '</div><div class="lbl">箱子数量</div></div>';
+  html += '<div class="info-card"><div class="num">' + (d.item_count||'-') + '</div><div class="lbl">SKU 数</div></div>';
+  html += '<div class="info-card"><div class="num">' + (m.item_count||'-') + '</div><div class="lbl">商品数量</div></div>';
+  html += '<div class="info-card"><div class="num">' + (m.sku_count||'-') + '</div><div class="lbl">SKU 种类</div></div>';
+  html += '</div>';
+  if (m.shipment_id) html += '<div style="padding:6px;background:#f0f6ff;border-radius:4px;margin-bottom:6px"><span style="color:#888;font-size:11px">货件编号</span><br><b>' + esc(m.shipment_id) + '</b></div>';
+  document.getElementById('summary').innerHTML = html;
+}
+
+function doGenerateSingle() {
+  if (state.files.length === 0) return toast('请先上传文件', true);
+  let btn = document.getElementById('gen-btn');
+  btn.disabled = true; btn.textContent = '⏳ 生成中…';
+  readFile(state.files[0], function(b64) {
+    var body = { file: b64 };
+    var hs = document.getElementById('hs-code').value.trim();
+    if (hs) body.hs_code = hs;
+    function doFetch() {
+      fetch('/api/weave', { method:'POST', body:JSON.stringify(body), headers:{'Content-Type':'application/json'} })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        btn.disabled = false; btn.textContent = '🧵 单件生成';
+        if (!d.success) { toast('生成失败: ' + d.error, true); return; }
+        state.woven = d;
+        var dl = document.getElementById('dl-btn');
+        dl.href = d.download_url; dl.download = d.download_url.split('/').pop();
+        dl.style.display = 'block'; dl.textContent = '⬇ 下载装箱单';
+        showResultSummary(d); showResultRows(d);
+        toast('✓ 生成完成');
+      }).catch(function(e) { btn.disabled = false; btn.textContent = '🧵 单件生成'; toast('生成失败', true); });
+    }
+    readTplThen(function(tpl_b64) {
+      if (tpl_b64) body.template = tpl_b64;
+      else if (state.templateId) body.template_id = state.templateId;
+      readTrackingThen(function(track_b64) {
+        if (track_b64) body.tracking = track_b64;
+        readShipThen(function(ship_b64) {
+          if (ship_b64) body.shipping = ship_b64;
+          doFetch();
+        });
+      });
+    });
+  });
+}
+
+function doGenerateBatch() {
+  if (state.files.length === 0) return toast('请先上传文件', true);
+  let total = state.files.length;
+  let btn = document.getElementById('gen-batch-btn');
+  btn.disabled = true; btn.textContent = '⏳ 0/' + total;
+  let hs = document.getElementById('hs-code').value.trim();
+
+  // 初始化结果区域
+  document.getElementById('batch-result').innerHTML = '<div style="margin-top:6px" id="batch-prog">⏳ 准备中…</div><div id="batch-list"></div>';
+  document.getElementById('summary').innerHTML = '<div class="section-title section-title-bao">📊 批量生成</div><div class="info-grid"><div class="info-card"><div class="num" id="batch-ok">0</div><div class="lbl">成功</div></div><div class="info-card"><div class="num" id="batch-fail">0</div><div class="lbl">失败</div></div></div>';
+
+  let okCount = 0, failCount = 0, finished = 0;
+  let fileData = [];
+
+  function updateProgress() {
+    let pct = Math.round(finished / total * 100);
+    btn.textContent = '⏳ ' + finished + '/' + total + ' (' + pct + '%)';
+    document.getElementById('batch-prog').innerHTML = '⏳ <span class="spinner"></span> ' + finished + '/' + total;
+    document.getElementById('batch-ok').textContent = okCount;
+    document.getElementById('batch-fail').textContent = failCount;
+  }
+
+  function appendResult(r) {
+    let list = document.getElementById('batch-list');
+    list.innerHTML += '<div style="font-size:11px;padding:3px 0"><span class="'+(r.success?'ok':'fail')+'">'+(r.success?'✓':'✗')+'</span> '+esc(r.success?r.shipment_id:r.filename)+(r.success?' <a href="'+r.download_url+'" style="color:#4a90d9;font-size:10px" download>下载</a>':' — '+esc(r.error))+'</div>';
+  }
+
+  function finalize() {
+    btn.disabled = false; btn.textContent = '📦 批量生成';
+    document.getElementById('batch-prog').innerHTML = '✅ 完成 — ' + okCount + ' 成功, ' + failCount + ' 失败';
+    toast('✓ 批量完成 — ' + okCount + '/' + total + ' 成功');
+  }
+
+  function processFile(fileObj, i) {
+    let body = { file: fileObj.data };
+    if (hs) body.hs_code = hs;
+    if (state.templateFile) {
+      let r2 = new FileReader();
+      r2.onload = () => {
+        body.template = r2.result.split(',')[1];
+        doWeave();
+      };
+      r2.readAsDataURL(state.templateFile);
+    } else if (state.templateId) {
+      body.template_id = state.templateId;
+      doWeave();
+    } else {
+      doWeave();
+    }
+    function doWeave() {
+      fetch('/api/weave', {
+        method: 'POST',
+        body: JSON.stringify(body),
+        headers: {'Content-Type': 'application/json'}
+      })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          okCount++;
+          let sid = (d.summary && d.summary.shipment_id) ? d.summary.shipment_id : fileObj.name;
+          appendResult({ success: true, shipment_id: sid, download_url: d.download_url });
+        } else {
+          failCount++;
+          appendResult({ success: false, filename: fileObj.name, error: d.error || '未知错误' });
+        }
+        finished++;
+        updateProgress();
+        if (finished === total) finalize();
+      })
+      .catch(e => {
+        failCount++; finished++;
+        appendResult({ success: false, filename: fileObj.name, error: e.message });
+        updateProgress();
+        if (finished === total) finalize();
+      });
+    }
+  }
+
+  // 读取所有文件后逐个处理
+  let readCount = 0;
+  state.files.forEach((f, i) => {
+    readFile(f, b64 => {
+      fileData[i] = { name: f.name, data: b64 };
+      readCount++;
+      if (readCount === total) {
+        // 全部读完，开始逐个处理
+        fileData.forEach((fd, idx) => processFile(fd, idx));
+      }
+    });
+  });
+}
+
+function showResultSummary(d) {
+  let s = d.summary || {};
+  let html = '<div class="section-title section-title-bao">📊 生成结果</div><div class="info-grid">';
+  html += '<div class="info-card"><div class="num">'+(s.total_boxes||'-')+'</div><div class="lbl">总箱数</div></div>';
+  html += '<div class="info-card"><div class="num">'+(s.total_weight||'-')+'</div><div class="lbl">总重量 kg</div></div>';
+  html += '<div class="info-card"><div class="num">'+(s.total_cbm||'-')+'</div><div class="lbl">总体积 CBM</div></div>';
+  html += '<div class="info-card"><div class="num">'+(s.row_count||'-')+'</div><div class="lbl">数据行</div></div>';
+  html += '</div>';
+  if(s.shipment_id) html += '<div style="padding:6px;background:#eafaf1;border-radius:4px;font-size:11px;color:#666">Shipment ID: <b>'+esc(s.shipment_id)+'</b></div>';
+  document.getElementById('summary').innerHTML = html;
+}
+
+function showResultRows(d) {
+  let rows = d.rows || [];
+  let html = '<div class="section-title">📋 装箱单明细</div><table><tr><th>箱号段</th><th>件数</th><th>SKU</th><th>HS</th><th>数量</th><th>重量</th><th>尺寸</th></tr>';
+  rows.forEach(r => {
+    html += '<tr><td>'+esc(r['箱号段'])+'</td><td>'+r['总件数']+'</td><td>'+esc(r['SKU'])+'</td><td>'+esc(r['海关编码'])+'</td><td>'+r['总数量']+'</td><td>'+r['单箱重量']+'</td><td>'+r['长']+'×'+r['宽']+'×'+r['高']+'</td></tr>';
+  });
+  html += '</table>';
+  document.getElementById('preview').innerHTML = html;
+}
+
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function onTemplateSelect(sel) {
+  state.templateId = sel.value;
+  if (state.templateId) {
+    document.getElementById('tpl-file-info').textContent = '✓ 已选：' + sel.options[sel.selectedIndex].text;
+  } else {
+    document.getElementById('tpl-file-info').textContent = '';
+  }
+}
+
+fetch('/api/templates').then(r=>r.json()).then(d=>{
+  if (d.success) {
+    var sel = document.getElementById('template-select');
+    d.templates.forEach(t=>{ var o=document.createElement('option'); o.value=t.id; o.textContent=t.name; sel.appendChild(o); });
+  }
+});
+
+// ====== Tab 切换 ======
+function switchTab(tab) {
+  let fbaBtn = document.getElementById('tab-fba');
+  let customsBtn = document.getElementById('tab-customs');
+  let fbaPanels = document.getElementById('fba-panels');
+  let customsPanels = document.getElementById('customs-panels');
+  if (tab === 'fba') {
+    fbaBtn.classList.add('active'); fbaBtn.style.color='#4a90d9'; fbaBtn.style.borderBottomColor='#4a90d9';
+    customsBtn.classList.remove('active'); customsBtn.style.color='#888'; customsBtn.style.borderBottomColor='transparent';
+    fbaPanels.style.display='flex'; customsPanels.style.display='none';
+  } else {
+    customsBtn.classList.add('active'); customsBtn.style.color='#4a90d9'; customsBtn.style.borderBottomColor='#4a90d9';
+    fbaBtn.classList.remove('active'); fbaBtn.style.color='#888'; fbaBtn.style.borderBottomColor='transparent';
+    fbaPanels.style.display='none'; customsPanels.style.display='flex';
+  }
+}
+
+// ====== 报关单信息汇总 ======
+state.customsFiles = [];
+state.customsParsed = null;
+
+let cdz = document.getElementById('customs-drop-zone');
+cdz.addEventListener('dragover', e => { e.preventDefault(); cdz.classList.add('active'); });
+cdz.addEventListener('dragleave', () => cdz.classList.remove('active'));
+cdz.addEventListener('drop', e => {
+  e.preventDefault(); cdz.classList.remove('active');
+  document.getElementById('customs-file-input').files = e.dataTransfer.files;
+  handleCustomsFiles(document.getElementById('customs-file-input'));
+});
+
+function handleCustomsFiles(input) {
+  state.customsFiles = Array.from(input.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  if (state.customsFiles.length === 0) { toast('请上传 PDF 格式的报关单文件', true); return; }
+  renderCustomsFileList();
+  document.getElementById('customs-gen-btn').disabled = false;
+}
+
+function renderCustomsFileList() {
+  let html = '';
+  state.customsFiles.forEach((f, i) => {
+    html += '<div class="file-badge"><span class="idx">' + (i+1) + '</span><span class="name" title="' + esc(f.name) + '">' + esc(f.name) + '</span><span class="remove" onclick="removeCustomsFile(' + i + ')">✕</span></div>';
+  });
+  document.getElementById('customs-file-list').innerHTML = html;
+}
+
+function removeCustomsFile(idx) {
+  state.customsFiles.splice(idx, 1);
+  let dt = new DataTransfer();
+  state.customsFiles.forEach(f => dt.items.add(f));
+  document.getElementById('customs-file-input').files = dt.files;
+  renderCustomsFileList();
+  if (state.customsFiles.length === 0) {
+    document.getElementById('customs-gen-btn').disabled = true;
+    document.getElementById('customs-dl-btn').style.display = 'none';
+    document.getElementById('customs-preview').innerHTML = '<div class="empty"><div class="icon">🛃</div>上传报关单 PDF 开始解析</div>';
+    document.getElementById('customs-summary-stats').innerHTML = '<div class="section-title section-title-bao">📊 汇总统计</div><div class="empty">等待上传…</div>';
+  }
+}
+
+function doCustomsSummary() {
+  if (state.customsFiles.length === 0) return;
+  let total = state.customsFiles.length;
+  let btn = document.getElementById('customs-gen-btn');
+  btn.disabled = true; btn.textContent = '⏳ 0/' + total;
+  document.getElementById('customs-dl-btn').style.display = 'none';
+
+  let collected = [];        // 收集已解析结果（按索引存）
+  let okCount = 0, failCount = 0, finished = 0;
+  let totalAmount = 0;
+  let previewHtml = '<div class="section-title">📋 报关单提取结果 <span style="font-weight:400;font-size:11px;color:#888" id="prog-text">0/' + total + '</span></div>';
+  previewHtml += '<table><tr><th>#</th><th>单号</th><th>下单日期</th><th>报关单号</th><th>报关金额</th><th>币种</th><th>申报日期</th><th>抬头</th><th>来源</th></tr>';
+  previewHtml += '<tbody id="customs-tbody"></tbody></table>';
+  document.getElementById('customs-preview').innerHTML = previewHtml;
+
+  function updateProgress() {
+    let pct = Math.round(finished / total * 100);
+    btn.textContent = '⏳ ' + finished + '/' + total + ' (' + pct + '%)';
+    document.getElementById('prog-text').textContent = finished + '/' + total;
+    let html = '<div class="section-title section-title-bao">📊 汇总统计</div><div class="info-grid">';
+    html += '<div class="info-card"><div class="num" style="color:#27ae60">' + okCount + '</div><div class="lbl">成功解析</div></div>';
+    html += '<div class="info-card"><div class="num" style="color:#e74c3c">' + failCount + '</div><div class="lbl">失败</div></div>';
+    html += '<div class="info-card"><div class="num" style="color:#4a90d9">' + totalAmount.toFixed(2) + '</div><div class="lbl">合计金额</div></div>';
+    html += '<div class="info-card"><div class="num" style="font-size:13px">美元</div><div class="lbl">币种</div></div>';
+    html += '</div>';
+    document.getElementById('customs-summary-stats').innerHTML = html;
+  }
+
+  function appendRow(idx, it) {
+    let tbody = document.getElementById('customs-tbody');
+    if (!tbody) return;
+    let tr = '<tr>';
+    if (it.error) {
+      tr += '<td>' + (idx+1) + '</td><td colspan="8" style="color:#e74c3c">❌ ' + esc(it.file||'') + ': ' + esc(it.error) + '</td>';
+    } else {
+      tr += '<td>' + (idx+1) + '</td><td>' + esc(it['单号']) + '</td><td>' + esc(it['下单日期']) + '</td><td>' + esc(it['报关单号']) + '</td><td>' + (it['报关金额']||'') + '</td><td>' + esc(it['币种']) + '</td><td>' + esc(it['申报日期']) + '</td><td>' + esc(it['报关抬头']) + '</td><td style="font-size:10px;color:#888">' + esc(it['_source']) + '</td>';
+    }
+    tr += '</tr>';
+    tbody.innerHTML += tr;
+  }
+
+  function finalize() {
+    btn.disabled = false; btn.textContent = '🧵 生成汇总 Excel';
+    if (okCount === 0) { toast('没有成功解析的报关单', true); return; }
+
+    // 调用导出 API 生成汇总 Excel
+    let okItems = collected.filter(it => it && !it.error);
+    fetch('/api/customs-export', {
+      method: 'POST',
+      body: JSON.stringify({ items: okItems }),
+      headers: {'Content-Type': 'application/json'}
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (d.success && d.file_b64) {
+        let dl = document.getElementById('customs-dl-btn');
+        dl.style.display = 'block';
+        dl.onclick = () => downloadCustomsB64(d.file_b64);
+      }
+      toast('✓ 完成 — ' + okCount + ' 份成功, ' + failCount + ' 份失败');
+    })
+    .catch(() => toast('导出 Excel 失败', true));
+  }
+
+  // 逐个读取并发送请求
+  state.customsFiles.forEach((f, i) => {
+    let r = new FileReader();
+    r.onload = () => {
+      let b64 = r.result.split(',')[1];
+      fetch('/api/customs-summary', {
+        method: 'POST',
+        body: JSON.stringify({ files: [{ name: f.name, data: b64 }] }),
+        headers: {'Content-Type': 'application/json'}
+      })
+      .then(res => res.json())
+      .then(d => {
+        let it = (d.items && d.items[0]) ? d.items[0] : { error: d.error || '解析异常', file: f.name };
+        collected[i] = it;
+        if (it.error) { failCount++; } else { okCount++; totalAmount += (it['报关金额'] || 0); }
+        finished++;
+        appendRow(i, it);
+        updateProgress();
+        if (finished === total) finalize();
+      })
+      .catch(e => {
+        collected[i] = { error: e.message, file: f.name };
+        failCount++; finished++;
+        appendRow(i, collected[i]);
+        updateProgress();
+        if (finished === total) finalize();
+      });
+    };
+    r.readAsDataURL(f);
+  });
+}
+
+function showCustomsPreview(d) {
+  let items = d.items || [];
+  let html = '<div class="section-title">📋 报关单提取结果</div>';
+  if (items.length === 0) { html += '<div class="empty">无数据</div>'; }
+  else {
+    html += '<table><tr><th>#</th><th>单号</th><th>下单日期</th><th>报关单号</th><th>报关金额</th><th>币种</th><th>申报日期</th><th>抬头</th><th>来源</th></tr>';
+    items.forEach((it, i) => {
+      if (it.error) {
+        html += '<tr><td>' + (i+1) + '</td><td colspan="8" style="color:#e74c3c">❌ ' + esc(it.file||'') + ': ' + esc(it.error) + '</td></tr>';
+      } else {
+        html += '<tr><td>' + (i+1) + '</td><td>' + esc(it['单号']) + '</td><td>' + esc(it['下单日期']) + '</td><td>' + esc(it['报关单号']) + '</td><td>' + (it['报关金额']||'') + '</td><td>' + esc(it['币种']) + '</td><td>' + esc(it['申报日期']) + '</td><td>' + esc(it['报关抬头']) + '</td><td style="font-size:10px;color:#888">' + esc(it['_source']) + '</td></tr>';
+      }
+    });
+    html += '</table>';
+  }
+  document.getElementById('customs-preview').innerHTML = html;
+}
+
+function showCustomsStats(d) {
+  let s = d.stats || {};
+  let html = '<div class="section-title section-title-bao">📊 汇总统计</div><div class="info-grid">';
+  html += '<div class="info-card"><div class="num" style="color:#27ae60">' + (s.ok||'-') + '</div><div class="lbl">成功解析</div></div>';
+  html += '<div class="info-card"><div class="num" style="color:#e74c3c">' + ((s.total||0)-(s.ok||0)) + '</div><div class="lbl">失败</div></div>';
+  html += '<div class="info-card"><div class="num" style="color:#4a90d9">' + (s.total_amount||'-') + '</div><div class="lbl">合计金额</div></div>';
+  html += '<div class="info-card"><div class="num" style="font-size:13px">' + (s.currencies&&s.currencies.length?s.currencies.join(','):'-') + '</div><div class="lbl">币种</div></div>';
+  html += '</div>';
+  document.getElementById('customs-summary-stats').innerHTML = html;
+}
+
+function downloadCustomsB64(b64) {
+  let raw = atob(b64), arr = new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) arr[i]=raw.charCodeAt(i);
+  let blob = new Blob([arr],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  let url = URL.createObjectURL(blob);
+  let a = document.createElement('a'); a.href=url; a.download='报关单信息汇总.xlsx'; a.click();
+  URL.revokeObjectURL(url);
+}
+
 </script>
 </body>
 </html>

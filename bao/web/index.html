@@ -66,7 +66,7 @@ tr:hover td{background:#f8faff}
 
 <div class="header">
   <h1>📦 bao</h1>
-  <span class="ver">v0.3.0 — 出口报关文件编织助手</span>
+  <span class="ver">v0.6.0 — 出口报关文件编织助手</span>
 </div>
 
 <!-- ====== 上屏：调整明细 → 发货计划 ====== -->
@@ -86,7 +86,7 @@ tr:hover td{background:#f8faff}
     </label>
     <div class="plan-info" id="adj-plan-file-info"></div>
     <button class="btn btn-plan" id="plan-gen-btn" disabled onclick="doMergePlan()">🔀 生成调整后发货计划</button>
-    <a class="btn btn-dl" id="plan-dl-btn" href="#" download>⬇ 下载结果</a>
+    <a class="btn btn-dl" id="plan-dl-btn" href="javascript:void(0)" download>⬇ 下载结果</a>
   </div>
   <div class="top-center" id="plan-preview">
     <div class="empty"><div class="icon">📋</div>上传调整明细后在此预览映射结果</div>
@@ -99,53 +99,75 @@ tr:hover td{background:#f8faff}
 
 <div class="section-divider"></div>
 
-<!-- ====== 下屏：FBA 装箱单 ====== -->
-<div class="main-section">
-  <div class="panel panel-left">
-    <div class="section-title section-title-bao">📤 FBA 装箱单生成</div>
-    <label class="upload-zone upload-zone-bao" id="drop-zone">
-      <input type="file" id="file-input" accept=".xlsx" multiple onchange="handleFiles(this)">
-      <div class="icon">📁</div>
-      <div class="text">拖拽或点击上传 FBA 货件</div>
-    </label>
-    <div class="file-list" id="file-list"></div>
-
-    <div class="tpl-select-row" style="margin-top:4px;display:flex;align-items:center;gap:6px">
-      <span style="font-size:12px;color:#888">常用模板：</span>
-      <select id="template-select" onchange="onTemplateSelect(this)" style="flex:1;padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px">
-        <option value="">-- 不上传（使用默认蜡烛模板）--</option>
-      </select>
-    </div>
-
-    <label class="upload-zone" id="tpl-drop-zone" style="border-color:#8e44ad;margin-top:4px">
-      <input type="file" id="tpl-file-input" accept=".xlsx" onchange="handleTplFile(this)">
-      <div class="icon">📐</div>
-      <div class="text">可选：上传自定义模板</div>
-    </label>
-    <div class="plan-info" id="tpl-file-info"></div>
-
-    <label class="upload-zone" id="track-drop-zone" style="border-color:#e67e22;margin-top:4px">
-      <input type="file" id="track-file-input" accept=".xlsx" onchange="handleTrackFile(this)">
-      <div class="icon">🔗</div>
-      <div class="text">可选：上传货件追踪码</div>
-    </label>
-    <div class="plan-info" id="track-file-info"></div>
-
-    <div class="hs-row">
-      <label>HS编码：</label>
-      <input type="text" id="hs-code" placeholder="自动匹配（蜡烛:3406000090）">
-    </div>
-    <button class="btn btn-primary" id="gen-btn" disabled onclick="doGenerateSingle()">🧵 单件生成</button>
-    <a class="btn btn-dl btn-download" id="dl-btn" style="display:none" href="#" download>⬇ 下载装箱单</a>
-    <button class="btn btn-batch" id="gen-batch-btn" disabled onclick="doGenerateBatch()">📦 批量生成</button>
-    <div class="batch-result" id="batch-result"></div>
+<!-- ====== 下屏：Tab 切换 ====== -->
+<div class="main-section" style="flex-direction:column">
+  <div class="tab-bar" style="display:flex;background:#eef1f5;padding:0 12px;flex-shrink:0">
+    <button class="tab-btn active" id="tab-fba" onclick="switchTab('fba')" style="padding:8px 20px;border:none;background:transparent;font-size:13px;font-weight:600;color:#4a90d9;border-bottom:3px solid #4a90d9;cursor:pointer">📤 FBA 装箱单生成</button>
+    <button class="tab-btn" id="tab-customs" onclick="switchTab('customs')" style="padding:8px 20px;border:none;background:transparent;font-size:13px;font-weight:600;color:#888;border-bottom:3px solid transparent;cursor:pointer">🛃 报关单信息汇总</button>
   </div>
-  <div class="panel panel-center" id="preview">
-    <div class="empty"><div class="icon">📋</div>上传 FBA 货件 Excel 开始</div>
+  <div id="fba-panels" style="display:flex;flex:1;overflow:hidden">
+    <div class="panel panel-left">
+      <div class="section-title section-title-bao">📤 FBA 装箱单生成</div>
+      <label class="upload-zone upload-zone-bao" id="drop-zone">
+        <input type="file" id="file-input" accept=".xlsx" multiple onchange="handleFiles(this)">
+        <div class="icon">📁</div>
+        <div class="text">拖拽或点击上传 FBA 货件</div>
+      </label>
+      <div class="file-list" id="file-list"></div>
+      <div class="tpl-select-row" style="margin-top:4px;display:flex;align-items:center;gap:6px">
+        <span style="font-size:12px;color:#888">常用模板：</span>
+        <select id="template-select" onchange="onTemplateSelect(this)" style="flex:1;padding:4px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px">
+          <option value="">-- 不上传（使用默认蜡烛模板）--</option>
+        </select>
+      </div>
+      <label class="upload-zone" id="tpl-drop-zone" style="border-color:#8e44ad;margin-top:4px">
+        <input type="file" id="tpl-file-input" accept=".xlsx" onchange="handleTplFile(this)">
+        <div class="icon">📐</div>
+        <div class="text">可选：上传自定义模板</div>
+      </label>
+      <div class="plan-info" id="tpl-file-info"></div>
+      <label class="upload-zone" id="track-drop-zone" style="border-color:#e67e22;margin-top:4px">
+        <input type="file" id="track-file-input" accept=".xlsx" onchange="handleTrackFile(this)">
+        <div class="icon">🔗</div>
+        <div class="text">可选：上传货件追踪码</div>
+      </label>
+      <div class="plan-info" id="track-file-info"></div>
+      <div class="hs-row">
+        <label>HS编码：</label>
+        <input type="text" id="hs-code" placeholder="自动匹配（蜡烛:3406000090）">
+      </div>
+      <button class="btn btn-primary" id="gen-btn" disabled onclick="doGenerateSingle()">🧵 单件生成</button>
+      <a class="btn btn-dl btn-download" id="dl-btn" style="display:none" href="javascript:void(0)" download>⬇ 下载装箱单</a>
+      <button class="btn btn-batch" id="gen-batch-btn" disabled onclick="doGenerateBatch()">📦 批量生成</button>
+      <div class="batch-result" id="batch-result"></div>
+    </div>
+    <div class="panel panel-center" id="preview">
+      <div class="empty"><div class="icon">📋</div>上传 FBA 货件 Excel 开始</div>
+    </div>
+    <div class="panel panel-right" id="summary">
+      <div class="section-title section-title-bao">📊 货件信息</div>
+      <div class="empty">等待上传…</div>
+    </div>
   </div>
-  <div class="panel panel-right" id="summary">
-    <div class="section-title section-title-bao">📊 货件信息</div>
-    <div class="empty">等待上传…</div>
+  <div id="customs-panels" style="display:none;flex:1;overflow:hidden">
+    <div class="panel panel-left">
+      <div class="section-title section-title-bao">🛃 报关单信息汇总</div>
+      <label class="upload-zone upload-zone-bao" id="customs-drop-zone">
+        <input type="file" id="customs-file-input" accept=".pdf" multiple onchange="handleCustomsFiles(this)">
+        <div class="icon">📄</div>
+        <div class="text">拖拽或点击上传报关单 PDF</div>
+      </label>
+      <div class="file-list" id="customs-file-list"></div>
+      <button class="btn btn-primary" id="customs-gen-btn" disabled onclick="doCustomsSummary()" style="margin-top:8px">🧵 生成汇总 Excel</button>
+      <a class="btn btn-dl btn-download" id="customs-dl-btn" style="display:none;margin-top:4px" href="javascript:void(0)" download>⬇ 下载汇总 Excel</a>
+    </div>
+    <div class="panel panel-center" id="customs-preview">
+      <div class="empty"><div class="icon">🛃</div>上传报关单 PDF 开始解析</div>
+    </div>
+    <div class="panel panel-right" id="customs-summary-stats">
+      <div class="section-title section-title-bao">📊 汇总统计</div>
+      <div class="empty">等待上传…</div>
+    </div>
   </div>
 </div>
 
@@ -349,7 +371,7 @@ function parseSingle(file) {
 }
 
 function clearAll() {
-  state = { files: [], parsed: null, woven: null, batchResult: null };
+  state = { files: [], parsed: null, woven: null, batchResult: null, templateFile: state.templateFile, trackingFile: state.trackingFile, shippingFile: state.shippingFile, templateId: state.templateId };
   document.getElementById('file-list').innerHTML = '';
   document.getElementById('file-input').value = '';
   document.getElementById('gen-btn').disabled = true;
@@ -424,48 +446,94 @@ function doGenerateSingle() {
 
 function doGenerateBatch() {
   if (state.files.length === 0) return toast('请先上传文件', true);
+  let total = state.files.length;
   let btn = document.getElementById('gen-batch-btn');
-  btn.disabled = true; btn.textContent = '⏳ 批量生成中…';
-  document.getElementById('batch-result').innerHTML = '<div class="loading"><span class="spinner"></span>处理 ' + state.files.length + ' 个文件…</div>';
-  let pending = state.files.length, fileData = [];
-  state.files.forEach(file => {
-    readFile(file, b64 => { fileData.push({name:file.name,data:b64}); pending--; if(pending===0)doBatchCall(fileData,btn); });
-  });
-}
+  btn.disabled = true; btn.textContent = '⏳ 0/' + total;
+  let hs = document.getElementById('hs-code').value.trim();
 
-function doBatchCall(fileData, btn) {
-  var hs = document.getElementById('hs-code').value.trim();
-  function doFetch(tpl) {
-    var body = {files:fileData,hs_code:hs||undefined};
-    if (tpl) body.template = tpl;
-    else if (state.templateId) body.template_id = state.templateId;
-    fetch('/api/weave-batch', {
-    method:'POST', body:JSON.stringify(body), headers:{'Content-Type':'application/json'}
-  })
-  .then(r => r.json())
-  .then(d => {
-    btn.disabled = false; btn.textContent = '📦 批量生成';
-    if (!d.success) { toast('批量生成失败: ' + d.error, true); return; }
-    state.batchResult = d; showBatchResult(d);
-    toast('✓ 批量完成 — ' + d.results.filter(r=>r.success).length + '/' + d.results.length + ' 成功');
-  }).catch(e => { btn.disabled = false; btn.textContent = '📦 批量生成'; toast('生成失败', true); });
+  // 初始化结果区域
+  document.getElementById('batch-result').innerHTML = '<div style="margin-top:6px" id="batch-prog">⏳ 准备中…</div><div id="batch-list"></div>';
+  document.getElementById('summary').innerHTML = '<div class="section-title section-title-bao">📊 批量生成</div><div class="info-grid"><div class="info-card"><div class="num" id="batch-ok">0</div><div class="lbl">成功</div></div><div class="info-card"><div class="num" id="batch-fail">0</div><div class="lbl">失败</div></div></div>';
+
+  let okCount = 0, failCount = 0, finished = 0;
+  let fileData = [];
+
+  function updateProgress() {
+    let pct = Math.round(finished / total * 100);
+    btn.textContent = '⏳ ' + finished + '/' + total + ' (' + pct + '%)';
+    document.getElementById('batch-prog').innerHTML = '⏳ <span class="spinner"></span> ' + finished + '/' + total;
+    document.getElementById('batch-ok').textContent = okCount;
+    document.getElementById('batch-fail').textContent = failCount;
   }
-  readTplThen(function(tplResult) {
-    tpl = tplResult;
-    readTrackingThen(doFetch);
-  });
-}
 
-function showBatchResult(d) {
-  let html = '<div style="margin-top:6px">';
-  if (d.zip_b64) html += '<a class="btn btn-zip" href="javascript:void(0)" onclick="downloadZipB64(\''+d.zip_b64+'\')" style="margin-bottom:6px;font-size:11px;padding:6px;display:block;text-align:center">📥 批量下载 ZIP</a>';
-  d.results.forEach(r => {
-    html += '<div style="font-size:11px;padding:3px 0"><span class="'+(r.success?'ok':'fail')+'">'+(r.success?'✓':'✗')+'</span> '+esc(r.success?r.shipment_id:r.filename)+(r.success?' <a href="'+r.download_url+'" style="color:#4a90d9;font-size:10px">下载</a>':' — '+esc(r.error))+'</div>';
+  function appendResult(r) {
+    let list = document.getElementById('batch-list');
+    list.innerHTML += '<div style="font-size:11px;padding:3px 0"><span class="'+(r.success?'ok':'fail')+'">'+(r.success?'✓':'✗')+'</span> '+esc(r.success?r.shipment_id:r.filename)+(r.success?' <a href="'+r.download_url+'" style="color:#4a90d9;font-size:10px" download>下载</a>':' — '+esc(r.error))+'</div>';
+  }
+
+  function finalize() {
+    btn.disabled = false; btn.textContent = '📦 批量生成';
+    document.getElementById('batch-prog').innerHTML = '✅ 完成 — ' + okCount + ' 成功, ' + failCount + ' 失败';
+    toast('✓ 批量完成 — ' + okCount + '/' + total + ' 成功');
+  }
+
+  function processFile(fileObj, i) {
+    let body = { file: fileObj.data };
+    if (hs) body.hs_code = hs;
+    if (state.templateFile) {
+      let r2 = new FileReader();
+      r2.onload = () => {
+        body.template = r2.result.split(',')[1];
+        doWeave();
+      };
+      r2.readAsDataURL(state.templateFile);
+    } else if (state.templateId) {
+      body.template_id = state.templateId;
+      doWeave();
+    } else {
+      doWeave();
+    }
+    function doWeave() {
+      fetch('/api/weave', {
+        method: 'POST',
+        body: JSON.stringify(body),
+        headers: {'Content-Type': 'application/json'}
+      })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          okCount++;
+          let sid = (d.summary && d.summary.shipment_id) ? d.summary.shipment_id : fileObj.name;
+          appendResult({ success: true, shipment_id: sid, download_url: d.download_url });
+        } else {
+          failCount++;
+          appendResult({ success: false, filename: fileObj.name, error: d.error || '未知错误' });
+        }
+        finished++;
+        updateProgress();
+        if (finished === total) finalize();
+      })
+      .catch(e => {
+        failCount++; finished++;
+        appendResult({ success: false, filename: fileObj.name, error: e.message });
+        updateProgress();
+        if (finished === total) finalize();
+      });
+    }
+  }
+
+  // 读取所有文件后逐个处理
+  let readCount = 0;
+  state.files.forEach((f, i) => {
+    readFile(f, b64 => {
+      fileData[i] = { name: f.name, data: b64 };
+      readCount++;
+      if (readCount === total) {
+        // 全部读完，开始逐个处理
+        fileData.forEach((fd, idx) => processFile(fd, idx));
+      }
+    });
   });
-  html += '</div>';
-  document.getElementById('batch-result').innerHTML = html;
-  let okCount = d.results.filter(r=>r.success).length;
-  document.getElementById('summary').innerHTML = '<div class="section-title section-title-bao">📊 批量生成结果</div><div class="info-grid"><div class="info-card"><div class="num">'+d.results.length+'</div><div class="lbl">总文件数</div></div><div class="info-card"><div class="num" style="color:#27ae60">'+okCount+'</div><div class="lbl">成功</div></div></div>';
 }
 
 function showResultSummary(d) {
@@ -490,14 +558,6 @@ function showResultRows(d) {
   document.getElementById('preview').innerHTML = html;
 }
 
-function downloadZipB64(b64) {
-  let raw = atob(b64), arr = new Uint8Array(raw.length);
-  for(let i=0;i<raw.length;i++) arr[i]=raw.charCodeAt(i);
-  let blob = new Blob([arr],{type:'application/zip'}), url = URL.createObjectURL(blob);
-  let a = document.createElement('a'); a.href=url; a.download='装箱单_批量.zip'; a.click();
-  URL.revokeObjectURL(url);
-}
-
 function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function onTemplateSelect(sel) {
@@ -515,6 +575,199 @@ fetch('/api/templates').then(r=>r.json()).then(d=>{
     d.templates.forEach(t=>{ var o=document.createElement('option'); o.value=t.id; o.textContent=t.name; sel.appendChild(o); });
   }
 });
+
+// ====== Tab 切换 ======
+function switchTab(tab) {
+  let fbaBtn = document.getElementById('tab-fba');
+  let customsBtn = document.getElementById('tab-customs');
+  let fbaPanels = document.getElementById('fba-panels');
+  let customsPanels = document.getElementById('customs-panels');
+  if (tab === 'fba') {
+    fbaBtn.classList.add('active'); fbaBtn.style.color='#4a90d9'; fbaBtn.style.borderBottomColor='#4a90d9';
+    customsBtn.classList.remove('active'); customsBtn.style.color='#888'; customsBtn.style.borderBottomColor='transparent';
+    fbaPanels.style.display='flex'; customsPanels.style.display='none';
+  } else {
+    customsBtn.classList.add('active'); customsBtn.style.color='#4a90d9'; customsBtn.style.borderBottomColor='#4a90d9';
+    fbaBtn.classList.remove('active'); fbaBtn.style.color='#888'; fbaBtn.style.borderBottomColor='transparent';
+    fbaPanels.style.display='none'; customsPanels.style.display='flex';
+  }
+}
+
+// ====== 报关单信息汇总 ======
+state.customsFiles = [];
+state.customsParsed = null;
+
+let cdz = document.getElementById('customs-drop-zone');
+cdz.addEventListener('dragover', e => { e.preventDefault(); cdz.classList.add('active'); });
+cdz.addEventListener('dragleave', () => cdz.classList.remove('active'));
+cdz.addEventListener('drop', e => {
+  e.preventDefault(); cdz.classList.remove('active');
+  document.getElementById('customs-file-input').files = e.dataTransfer.files;
+  handleCustomsFiles(document.getElementById('customs-file-input'));
+});
+
+function handleCustomsFiles(input) {
+  state.customsFiles = Array.from(input.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  if (state.customsFiles.length === 0) { toast('请上传 PDF 格式的报关单文件', true); return; }
+  renderCustomsFileList();
+  document.getElementById('customs-gen-btn').disabled = false;
+}
+
+function renderCustomsFileList() {
+  let html = '';
+  state.customsFiles.forEach((f, i) => {
+    html += '<div class="file-badge"><span class="idx">' + (i+1) + '</span><span class="name" title="' + esc(f.name) + '">' + esc(f.name) + '</span><span class="remove" onclick="removeCustomsFile(' + i + ')">✕</span></div>';
+  });
+  document.getElementById('customs-file-list').innerHTML = html;
+}
+
+function removeCustomsFile(idx) {
+  state.customsFiles.splice(idx, 1);
+  let dt = new DataTransfer();
+  state.customsFiles.forEach(f => dt.items.add(f));
+  document.getElementById('customs-file-input').files = dt.files;
+  renderCustomsFileList();
+  if (state.customsFiles.length === 0) {
+    document.getElementById('customs-gen-btn').disabled = true;
+    document.getElementById('customs-dl-btn').style.display = 'none';
+    document.getElementById('customs-preview').innerHTML = '<div class="empty"><div class="icon">🛃</div>上传报关单 PDF 开始解析</div>';
+    document.getElementById('customs-summary-stats').innerHTML = '<div class="section-title section-title-bao">📊 汇总统计</div><div class="empty">等待上传…</div>';
+  }
+}
+
+function doCustomsSummary() {
+  if (state.customsFiles.length === 0) return;
+  let total = state.customsFiles.length;
+  let btn = document.getElementById('customs-gen-btn');
+  btn.disabled = true; btn.textContent = '⏳ 0/' + total;
+  document.getElementById('customs-dl-btn').style.display = 'none';
+
+  let collected = [];        // 收集已解析结果（按索引存）
+  let okCount = 0, failCount = 0, finished = 0;
+  let totalAmount = 0;
+  let previewHtml = '<div class="section-title">📋 报关单提取结果 <span style="font-weight:400;font-size:11px;color:#888" id="prog-text">0/' + total + '</span></div>';
+  previewHtml += '<table><tr><th>#</th><th>单号</th><th>下单日期</th><th>报关单号</th><th>报关金额</th><th>币种</th><th>申报日期</th><th>抬头</th><th>来源</th></tr>';
+  previewHtml += '<tbody id="customs-tbody"></tbody></table>';
+  document.getElementById('customs-preview').innerHTML = previewHtml;
+
+  function updateProgress() {
+    let pct = Math.round(finished / total * 100);
+    btn.textContent = '⏳ ' + finished + '/' + total + ' (' + pct + '%)';
+    document.getElementById('prog-text').textContent = finished + '/' + total;
+    let html = '<div class="section-title section-title-bao">📊 汇总统计</div><div class="info-grid">';
+    html += '<div class="info-card"><div class="num" style="color:#27ae60">' + okCount + '</div><div class="lbl">成功解析</div></div>';
+    html += '<div class="info-card"><div class="num" style="color:#e74c3c">' + failCount + '</div><div class="lbl">失败</div></div>';
+    html += '<div class="info-card"><div class="num" style="color:#4a90d9">' + totalAmount.toFixed(2) + '</div><div class="lbl">合计金额</div></div>';
+    html += '<div class="info-card"><div class="num" style="font-size:13px">美元</div><div class="lbl">币种</div></div>';
+    html += '</div>';
+    document.getElementById('customs-summary-stats').innerHTML = html;
+  }
+
+  function appendRow(idx, it) {
+    let tbody = document.getElementById('customs-tbody');
+    if (!tbody) return;
+    let tr = '<tr>';
+    if (it.error) {
+      tr += '<td>' + (idx+1) + '</td><td colspan="8" style="color:#e74c3c">❌ ' + esc(it.file||'') + ': ' + esc(it.error) + '</td>';
+    } else {
+      tr += '<td>' + (idx+1) + '</td><td>' + esc(it['单号']) + '</td><td>' + esc(it['下单日期']) + '</td><td>' + esc(it['报关单号']) + '</td><td>' + (it['报关金额']||'') + '</td><td>' + esc(it['币种']) + '</td><td>' + esc(it['申报日期']) + '</td><td>' + esc(it['报关抬头']) + '</td><td style="font-size:10px;color:#888">' + esc(it['_source']) + '</td>';
+    }
+    tr += '</tr>';
+    tbody.innerHTML += tr;
+  }
+
+  function finalize() {
+    btn.disabled = false; btn.textContent = '🧵 生成汇总 Excel';
+    if (okCount === 0) { toast('没有成功解析的报关单', true); return; }
+
+    // 调用导出 API 生成汇总 Excel
+    let okItems = collected.filter(it => it && !it.error);
+    fetch('/api/customs-export', {
+      method: 'POST',
+      body: JSON.stringify({ items: okItems }),
+      headers: {'Content-Type': 'application/json'}
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (d.success && d.file_b64) {
+        let dl = document.getElementById('customs-dl-btn');
+        dl.style.display = 'block';
+        dl.onclick = () => downloadCustomsB64(d.file_b64);
+      }
+      toast('✓ 完成 — ' + okCount + ' 份成功, ' + failCount + ' 份失败');
+    })
+    .catch(() => toast('导出 Excel 失败', true));
+  }
+
+  // 逐个读取并发送请求
+  state.customsFiles.forEach((f, i) => {
+    let r = new FileReader();
+    r.onload = () => {
+      let b64 = r.result.split(',')[1];
+      fetch('/api/customs-summary', {
+        method: 'POST',
+        body: JSON.stringify({ files: [{ name: f.name, data: b64 }] }),
+        headers: {'Content-Type': 'application/json'}
+      })
+      .then(res => res.json())
+      .then(d => {
+        let it = (d.items && d.items[0]) ? d.items[0] : { error: d.error || '解析异常', file: f.name };
+        collected[i] = it;
+        if (it.error) { failCount++; } else { okCount++; totalAmount += (it['报关金额'] || 0); }
+        finished++;
+        appendRow(i, it);
+        updateProgress();
+        if (finished === total) finalize();
+      })
+      .catch(e => {
+        collected[i] = { error: e.message, file: f.name };
+        failCount++; finished++;
+        appendRow(i, collected[i]);
+        updateProgress();
+        if (finished === total) finalize();
+      });
+    };
+    r.readAsDataURL(f);
+  });
+}
+
+function showCustomsPreview(d) {
+  let items = d.items || [];
+  let html = '<div class="section-title">📋 报关单提取结果</div>';
+  if (items.length === 0) { html += '<div class="empty">无数据</div>'; }
+  else {
+    html += '<table><tr><th>#</th><th>单号</th><th>下单日期</th><th>报关单号</th><th>报关金额</th><th>币种</th><th>申报日期</th><th>抬头</th><th>来源</th></tr>';
+    items.forEach((it, i) => {
+      if (it.error) {
+        html += '<tr><td>' + (i+1) + '</td><td colspan="8" style="color:#e74c3c">❌ ' + esc(it.file||'') + ': ' + esc(it.error) + '</td></tr>';
+      } else {
+        html += '<tr><td>' + (i+1) + '</td><td>' + esc(it['单号']) + '</td><td>' + esc(it['下单日期']) + '</td><td>' + esc(it['报关单号']) + '</td><td>' + (it['报关金额']||'') + '</td><td>' + esc(it['币种']) + '</td><td>' + esc(it['申报日期']) + '</td><td>' + esc(it['报关抬头']) + '</td><td style="font-size:10px;color:#888">' + esc(it['_source']) + '</td></tr>';
+      }
+    });
+    html += '</table>';
+  }
+  document.getElementById('customs-preview').innerHTML = html;
+}
+
+function showCustomsStats(d) {
+  let s = d.stats || {};
+  let html = '<div class="section-title section-title-bao">📊 汇总统计</div><div class="info-grid">';
+  html += '<div class="info-card"><div class="num" style="color:#27ae60">' + (s.ok||'-') + '</div><div class="lbl">成功解析</div></div>';
+  html += '<div class="info-card"><div class="num" style="color:#e74c3c">' + ((s.total||0)-(s.ok||0)) + '</div><div class="lbl">失败</div></div>';
+  html += '<div class="info-card"><div class="num" style="color:#4a90d9">' + (s.total_amount||'-') + '</div><div class="lbl">合计金额</div></div>';
+  html += '<div class="info-card"><div class="num" style="font-size:13px">' + (s.currencies&&s.currencies.length?s.currencies.join(','):'-') + '</div><div class="lbl">币种</div></div>';
+  html += '</div>';
+  document.getElementById('customs-summary-stats').innerHTML = html;
+}
+
+function downloadCustomsB64(b64) {
+  let raw = atob(b64), arr = new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) arr[i]=raw.charCodeAt(i);
+  let blob = new Blob([arr],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  let url = URL.createObjectURL(blob);
+  let a = document.createElement('a'); a.href=url; a.download='报关单信息汇总.xlsx'; a.click();
+  URL.revokeObjectURL(url);
+}
 
 </script>
 </body>
