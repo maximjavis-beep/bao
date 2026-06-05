@@ -205,12 +205,8 @@ async def api_weave(request: Request, file: UploadFile = File(None), hs_code: st
         out = UPLOAD_DIR / f"{meta.get('shipment_id','UNKNOWN')}-装箱单_{uuid.uuid4().hex[:6]}.xlsx"
         FBAExporter(template_path=tpl_path, tracking_map=tracking_map, shipping_map=shipping_map).export(woven, str(out))
         file_b64 = base64.b64encode(out.read_bytes()).decode()
-        download_url = ""
-        if out.exists():
-            download_url = "/api/download/" + _make_token(out)
-        else:
-            out.unlink(missing_ok=True)
-        return JSONResponse({"success": True, "file_b64": file_b64, "download_url": download_url, "summary": {
+        out.unlink(missing_ok=True)
+        return JSONResponse({"success": True, "file_b64": file_b64, "summary": {
             "shipment_id": woven["shipment_id"], "total_boxes": woven["total_boxes"],
             "total_weight": woven["total_weight"], "total_cbm": woven["total_cbm"],
             "row_count": len(woven["rows"])}, "rows": woven["rows"]})

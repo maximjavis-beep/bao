@@ -469,7 +469,11 @@ function doGenerateBatch() {
 
   function appendResult(r) {
     let list = document.getElementById('batch-list');
-    list.innerHTML += '<div style="font-size:11px;padding:3px 0"><span class="'+(r.success?'ok':'fail')+'">'+(r.success?'✓':'✗')+'</span> '+esc(r.success?r.shipment_id:r.filename)+(r.success?' <a href="'+r.download_url+'" style="color:#4a90d9;font-size:10px" download>下载</a>':' — '+esc(r.error))+'</div>';
+    let dl = '';
+    if (r.success && r.file_b64) {
+      dl = ' <a onclick="downloadB64(''+r.shipment_id+'.xlsx',''+r.file_b64+'')" style="color:#4a90d9;font-size:10px;cursor:pointer">下载</a>';
+    }
+    list.innerHTML += '<div style="font-size:11px;padding:3px 0"><span class="'+(r.success?'ok':'fail')+'">'+(r.success?'✓':'✗')+'</span> '+esc(r.success?r.shipment_id:r.filename)+dl+(r.success?'':' — '+esc(r.error))+'</div>';
   }
 
   function finalize() {
@@ -510,7 +514,7 @@ function doGenerateBatch() {
         if (d.success) {
           okCount++;
           let sid = (d.summary && d.summary.shipment_id) ? d.summary.shipment_id : fileObj.name;
-          appendResult({ success: true, shipment_id: sid, download_url: d.download_url });
+          appendResult({ success: true, shipment_id: sid, file_b64: d.file_b64 });
           if (d.file_b64) batchFileB64s.push({name: sid + '.xlsx', b64: d.file_b64});
         } else {
           failCount++;
@@ -774,6 +778,13 @@ function downloadCustomsB64(b64) {
   let blob = new Blob([arr],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   let url = URL.createObjectURL(blob);
   let a = document.createElement('a'); a.href=url; a.download='报关单信息汇总.xlsx'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadB64(filename, b64) {
+  let blob = b64ToBlob(b64, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  let url = URL.createObjectURL(blob);
+  let a = document.createElement('a'); a.href=url; a.download=filename; a.click();
   URL.revokeObjectURL(url);
 }
 
