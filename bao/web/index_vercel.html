@@ -471,7 +471,7 @@ function doGenerateBatch() {
     let list = document.getElementById('batch-list');
     let dl = '';
     if (r.success && r.file_b64) {
-      dl = ' <a onclick="downloadB64(''+r.shipment_id+'.xlsx',''+r.file_b64+'')" style="color:#4a90d9;font-size:10px;cursor:pointer">下载</a>';
+      dl = ' <a onclick="downloadB64(\x27'+r.shipment_id+'.xlsx\x27,\x27'+r.file_b64+'\x27)" style="color:#4a90d9;font-size:10px;cursor:pointer">下载</a>';
     }
     list.innerHTML += '<div style="font-size:11px;padding:3px 0"><span class="'+(r.success?'ok':'fail')+'">'+(r.success?'✓':'✗')+'</span> '+esc(r.success?r.shipment_id:r.filename)+dl+(r.success?'':' — '+esc(r.error))+'</div>';
   }
