@@ -89,21 +89,29 @@ class CustomsPDFParser:
         return ""
 
     def _extract_total_price(self, text: str) -> Optional[float]:
-        """提取报关总价 — 在币种关键字附近定位"""
+        """提取报关总价 — 在币种关键字附近定位，多商品时累加"""
         lines = text.split('\n')
+        total = 0.0
+        found = False
         for i, line in enumerate(lines):
             stripped = line.strip()
             m_cur = re.search(r'(美元|人民币|欧元|日元|英镑|港币)', stripped)
             if m_cur:
+                # 尝试同行中币种前面的数字
                 before = stripped[:m_cur.start()]
                 m_price = re.search(r'([\d,]+\.?\d*)\s*$', before)
                 if m_price:
-                    return self._to_float(m_price.group(1))
-                if i > 0:
+                    total += (self._to_float(m_price.group(1)) or 0)
+                    found = True
+                elif i > 0:
+                    # 尝试上一行纯数字
                     prev = lines[i - 1].strip()
                     m_price = self.RE_PRICE_LINE.match(prev)
                     if m_price:
-                        return self._to_float(m_price.group(1))
+                        total += (self._to_float(m_price.group(1)) or 0)
+                        found = True
+        if found:
+            return round(total, 2)
         m = self.RE_TOTAL_PRICE.search(text)
         if m:
             return self._to_float(m.group(1))

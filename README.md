@@ -1,6 +1,6 @@
 # bao — 出口报关文件编织助手
 
-从 FBA 货件 Excel 一键生成清关装箱单，支持调整明细自动填充发货计划、货件追踪码匹配、自定义模板上传、DISPIMG 嵌入图片。双面板 Web 界面 + CLI + Vercel 线上部署。
+从 FBA 货件 Excel 一键生成清关装箱单，支持报关单 PDF 智能提取汇总、调整明细自动填充发货计划、货件追踪码匹配、自定义模板上传、DISPIMG 嵌入图片。Web 面板（双屏 + 下屏 Tab 切换）+ Vercel 线上部署。
 
 🌐 **线上版**：https://bao-sepia-delta.vercel.app/
 
@@ -35,15 +35,28 @@ bash restart.sh
 3. 按四步规则（店铺筛选 → 识别码+FNSKU 匹配 → 数量判断 → 清理黄色行）自动处理
 4. 下载结果（匹配组数 / 删除行数统计）
 
-#### 下屏 — FBA 装箱单生成
+#### 下屏 — Tab 切换
+
+下屏顶部提供两个功能 Tab，点击切换：
+
+**📤 FBA 装箱单生成**
 
 1. 上传 FBA 货件 Excel（packing sheet）— 支持多选拖拽
 2. （可选）选择常用模板 — 下拉框选择德速模板，无需每次上传
-3. （可选）上传自定义模板 — 覆盖常用模板选择，自动适配表头
-4. （可选）上传出运数据 — 自动匹配 Reference ID，并填充仓库代码、渠道、总件数、参考号
-5. 自动解析并预览 SKU 明细和货件信息
-6. 点击「🧵 单件生成」或「📦 批量生成」
-7. 单件直接下载，批量打包 ZIP
+3. （可选）上传自定义模板 / 货件追踪码
+4. 自动解析并预览 SKU 明细和货件信息
+5. 点击「🧵 单件生成」或「📦 批量生成」
+6. 批量模式下逐文件处理，实时显示进度（`3/10 (30%)`），每个完成即可单独下载
+
+**🛃 报关单信息汇总**（v0.6.0 新增）
+
+1. 拖拽或选择多个报关单 PDF 文件（支持批量上传，建议每次 10~15 份）
+2. 点击「🧵 生成汇总 Excel」
+3. 逐份解析并实时显示进度，预览表格逐行追加
+4. 右侧面板实时统计：成功/失败数量、合计金额
+5. 全部完成后自动生成汇总 Excel，一键下载
+
+> **解析规则**：从 PDF 中自动提取合同协议号 → 单号、条形码号 → 报关单号、总价 → 报关金额、币制 → 币种、申报日期；单号前缀智能映射报关抬头（QX=沁香、MS=蔓莎、LJ=六觉）；单号中的 8 位数字自动解析为下单日期。
 
 ### CLI
 
@@ -156,26 +169,29 @@ bao/
 ├── api/index.py              # FastAPI Vercel 入口
 ├── bao/
 │   ├── core/
-│   │   ├── exporter.py       # 导出（颜色规则/DISPIMG/追踪码/元数据填充）
-│   │   └── weaver.py         # 编织（HS 查表/箱号标准化/品类匹配）
+│   │   ├── exporter.py          # 导出（颜色规则/DISPIMG/追踪码/元数据填充）
+│   │   ├── weaver.py            # 编织（HS 查表/箱号标准化/品类匹配）
+│   │   └── customs_exporter.py  # 报关单汇总 Excel 导出器
 │   ├── parsers/
-│   │   └── fba_parser.py     # FBA packing sheet 解析器
+│   │   ├── fba_parser.py            # FBA packing sheet 解析器
+│   │   └── customs_pdf_parser.py    # 报关单 PDF 解析器
 │   └── web/
 │       ├── server.py         # 本地 HTTP 服务
 │       ├── index.html        # 本地 Web 面板
-│       └── index_vercel.html # Vercel 在线面板
+│       └── index_vercel.html # Vercel 在线面板（同 index.html）
 ├── data/
 │   └── hs_code.xlsx          # HS 编码知识库
 ├── templates/                # 模板文件
 │   ├── 蜡烛-模版.xlsx         # 默认蜡烛模板
 │   └── 德速-模板.xlsx         # 内置德速模板
 ├── pyproject.toml            # 依赖配置
+├── requirements.txt          # Vercel 依赖
 └── README.md
 ```
 
 ## 依赖
 
-fastapi / python-multipart / openpyxl / pydantic / typer / rich / Pillow
+fastapi / python-multipart / openpyxl / pydantic / typer / rich / Pillow / PyPDF2
 
 ## 故障排除
 
@@ -188,3 +204,5 @@ fastapi / python-multipart / openpyxl / pydantic / typer / rich / Pillow
 | 自定义模板列对不上 | 检查模板表头关键词是否在 PATTERNS 中 |
 | 追踪码未匹配 | 确认出运数据文件 FBA编号 列与 Shipment ID 一致 |
 | 渠道填错 | 确认模板元数据标签名称（如"渠道"）与 PATTERNS 精确匹配，注意"渠道"≠"渠道能力" |
+| 报关单 PDF 解析失败 | 确认 PDF 为海关出口货物报关单格式；检查单号是否包含 8 位日期和有效前缀（QX/MS/LJ） |
+| Vercel 报错 No module named 'PyPDF2' | 确认 `pyproject.toml` 和 `requirements.txt` 均已包含 PyPDF2 依赖 |
