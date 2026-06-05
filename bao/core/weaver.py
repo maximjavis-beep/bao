@@ -103,6 +103,7 @@ def weave_fba(data: dict, hs_code_override: Optional[str] = None) -> dict:
 
         # HS 编码匹配：优先进口海关编码 → HS CODE → 关键词
         input_hs = item.get("input_hs_code", "")
+        matched_kw = None
         hs_code = hs_code_override or _DEFAULT_HS_CODE
 
         if not hs_code_override:
