@@ -424,7 +424,10 @@ function doGenerateSingle() {
         if (!d.success) { toast('生成失败: ' + d.error, true); return; }
         state.woven = d;
         var dl = document.getElementById('dl-btn');
-        dl.href = d.download_url; dl.download = d.download_url.split('/').pop();
+        if (d.file_b64) {
+          dl.onclick = function(){ downloadB64('装箱单.xlsx', d.file_b64); return false; };
+          dl.href = '#';
+        }
         dl.style.display = 'block'; dl.textContent = '⬇ 下载装箱单';
         showResultSummary(d); showResultRows(d);
         toast('✓ 生成完成');
