@@ -483,11 +483,11 @@ function doGenerateBatch() {
     btn.disabled = false; btn.textContent = '📦 批量生成';
     document.getElementById('batch-prog').innerHTML = '✅ 完成 — ' + okCount + ' 成功, ' + failCount + ' 失败';
     toast('✓ 批量完成 — ' + okCount + '/' + total + ' 成功');
-    if (okCount > 0 && batchFileB64s.length > 0) {
-      let list = document.getElementById('batch-list');
-      list.innerHTML += '<div style="margin-top:6px"><a class="btn btn-zip" href="javascript:void(0)" onclick="downloadBatchZipVercel()" style="font-size:11px;padding:6px 12px;width:auto;display:inline-block;margin-top:6px">📥 批量下载 ZIP ('+okCount+' 个文件)</a></div>';
-      window._batchZipFiles = batchFileB64s;
-    }
+    let list = document.getElementById('batch-list');
+    let btnText = (okCount > 0) ? '📥 批量下载 ZIP ('+okCount+' 个文件)' : '📥 批量下载 ZIP (无文件)';
+    let btnDisabled = (okCount > 0) ? '' : 'disabled';
+    list.innerHTML += '<div style="margin-top:6px"><a class="btn btn-zip" href="javascript:void(0)" onclick="downloadBatchZipVercel()" style="font-size:11px;padding:6px 12px;width:auto;display:inline-block;margin-top:6px;'+(okCount>0?'':'opacity:0.5;pointer-events:none')+'">'+btnText+'</a></div>';
+    window._batchZipFiles = batchFileB64s;
   }
 
   function processFile(fileObj, i) {
@@ -798,7 +798,7 @@ function downloadB64(filename, b64) {
 
 function downloadBatchZipVercel() {
   let files = window._batchZipFiles || [];
-  if (!files.length) return;
+  if (!files.length) { alert('没有可下载的文件'); return; }
   fetch('/api/download-zip', {
     method: 'POST',
     body: JSON.stringify({files: files}),
