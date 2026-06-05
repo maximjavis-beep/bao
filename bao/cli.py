@@ -17,7 +17,7 @@ app.add_typer(archive_app, name="archive", help="历史归档检索")
 @app.command("version")
 def version():
     """显示版本"""
-    console.print("[bold cyan]bao[/bold cyan] v0.6.2 — FBA 装箱单生成助手")
+    console.print("[bold cyan]bao[/bold cyan] v0.6.5 — FBA 装箱单生成助手")
 
 
 if __name__ == "__main__":
