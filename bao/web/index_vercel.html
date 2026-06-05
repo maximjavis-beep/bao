@@ -140,6 +140,7 @@ tr:hover td{background:#f8faff}
       <a class="btn btn-dl btn-download" id="dl-btn" style="display:none" href="javascript:void(0)" download>⬇ 下载装箱单</a>
       <button class="btn btn-batch" id="gen-batch-btn" disabled onclick="doGenerateBatch()">📦 批量生成</button>
       <div class="batch-result" id="batch-result"></div>
+      <a class="btn btn-zip" id="batch-zip-btn" href="javascript:void(0)" onclick="downloadBatchZipVercel()" style="display:none;margin:6px auto;width:auto;font-size:13px;padding:10px 24px;text-align:center">📥 批量下载 ZIP</a>
     </div>
     <div class="panel panel-center" id="preview">
       <div class="empty"><div class="icon">📋</div>上传 FBA 货件 Excel 开始</div>
@@ -484,11 +485,17 @@ function doGenerateBatch() {
     document.getElementById('batch-prog').innerHTML = '✅ 完成 — ' + okCount + ' 成功, ' + failCount + ' 失败';
     toast('✓ 批量完成 — ' + okCount + '/' + total + ' 成功');
     window._batchZipFiles = batchFileB64s;
-    var btnHtml = '<div style="margin-top:6px;text-align:center"><a class="btn btn-zip" href="javascript:void(0)" onclick="downloadBatchZipVercel()" style="font-size:13px;padding:10px 24px;display:inline-block;'+(okCount>0?'':'opacity:0.5;pointer-events:none')+'">📥 批量下载 ZIP ('+okCount+' 个文件)</a></div>';
-    if (okCount > 0) {
-      document.getElementById('batch-prog').insertAdjacentHTML('afterend', btnHtml);
-    } else {
-      document.getElementById('batch-prog').insertAdjacentHTML('afterend', btnHtml);
+    var zipBtn = document.getElementById('batch-zip-btn');
+    if (zipBtn && okCount > 0) {
+      zipBtn.textContent = '📥 批量下载 ZIP ('+okCount+' 个文件)';
+      zipBtn.style.display = 'block';
+      zipBtn.style.opacity = '1';
+      zipBtn.style.pointerEvents = 'auto';
+    } else if (zipBtn) {
+      zipBtn.textContent = '📥 批量下载 ZIP (无文件)';
+      zipBtn.style.display = 'block';
+      zipBtn.style.opacity = '0.5';
+      zipBtn.style.pointerEvents = 'none';
     }
   }
 
