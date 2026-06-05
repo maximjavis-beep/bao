@@ -502,19 +502,17 @@ function doGenerateBatch() {
   function processFile(fileObj, i) {
     let body = { file: fileObj.data };
     if (hs) body.hs_code = hs;
-    if (state.templateFile) {
-      let r2 = new FileReader();
-      r2.onload = () => {
-        body.template = r2.result.split(',')[1];
-        doWeave();
-      };
-      r2.readAsDataURL(state.templateFile);
-    } else if (state.templateId) {
-      body.template_id = state.templateId;
-      doWeave();
-    } else {
-      doWeave();
-    }
+    readTplThen(function(tpl_b64) {
+      if (tpl_b64) body.template = tpl_b64;
+      else if (state.templateId) body.template_id = state.templateId;
+      readTrackingThen(function(track_b64) {
+        if (track_b64) body.tracking = track_b64;
+        readShipThen(function(ship_b64) {
+          if (ship_b64) body.shipping = ship_b64;
+          doWeave();
+        });
+      });
+    });
     function doWeave() {
       fetch('/api/weave', {
         method: 'POST',
