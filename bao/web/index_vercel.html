@@ -483,11 +483,13 @@ function doGenerateBatch() {
     btn.disabled = false; btn.textContent = '📦 批量生成';
     document.getElementById('batch-prog').innerHTML = '✅ 完成 — ' + okCount + ' 成功, ' + failCount + ' 失败';
     toast('✓ 批量完成 — ' + okCount + '/' + total + ' 成功');
-    let list = document.getElementById('batch-list');
-    let btnText = (okCount > 0) ? '📥 批量下载 ZIP ('+okCount+' 个文件)' : '📥 批量下载 ZIP (无文件)';
-    let btnDisabled = (okCount > 0) ? '' : 'disabled';
-    list.innerHTML += '<div style="margin-top:6px"><a class="btn btn-zip" href="javascript:void(0)" onclick="downloadBatchZipVercel()" style="font-size:11px;padding:6px 12px;width:auto;display:inline-block;margin-top:6px;'+(okCount>0?'':'opacity:0.5;pointer-events:none')+'">'+btnText+'</a></div>';
     window._batchZipFiles = batchFileB64s;
+    var btnHtml = '<div style="margin-top:6px;text-align:center"><a class="btn btn-zip" href="javascript:void(0)" onclick="downloadBatchZipVercel()" style="font-size:13px;padding:10px 24px;display:inline-block;'+(okCount>0?'':'opacity:0.5;pointer-events:none')+'">📥 批量下载 ZIP ('+okCount+' 个文件)</a></div>';
+    if (okCount > 0) {
+      document.getElementById('batch-prog').insertAdjacentHTML('afterend', btnHtml);
+    } else {
+      document.getElementById('batch-prog').insertAdjacentHTML('afterend', btnHtml);
+    }
   }
 
   function processFile(fileObj, i) {
