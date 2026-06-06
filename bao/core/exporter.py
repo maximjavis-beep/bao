@@ -308,7 +308,7 @@ class FBAExporter:
         # ── 九方：币种写入 Row2 T列 (column 20) ──
         if _is_jiufang:
             _cc = woven.get("country_code", "")
-            _currency_map = {"US": "USD", "CA": "USD", "AU": "USD", "UK": "GBP", "DE": "EUR"}
+            _currency_map = {"US": "USD", "CA": "USD", "AU": "USD", "GB": "GBP", "DE": "EUR"}
             _currency = _currency_map.get(_cc, "")
             if _currency:
                 try:
