@@ -281,6 +281,9 @@ class FBAExporter:
         for fld, val in r2.items():
             c = col(fld)
             if c > 0:
+                # 九方模板：C4 是箱号规则值 U000001，不要覆盖
+                if _is_jiufang and c == 4:
+                    continue
                 ws.cell(row=2, column=c, value=val)
 
         # 从 tracking_map 填充模板元数据单元格（参考号/仓库代码/渠道/总件数）
