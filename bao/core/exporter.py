@@ -302,16 +302,14 @@ class FBAExporter:
                 if val is not None:
                     self._set_col(ws, mr, mc, str(val), center, bf, YELLOW_FILL)
 
-        # ── 九方：币种写入 Row2 S列 ──
+        # ── 九方：币种写入 Row2 T列 (column 20) ──
         if _is_jiufang:
             _cc = woven.get("country_code", "")
             _currency_map = {"US": "USD", "CA": "USD", "AU": "USD", "UK": "GBP", "DE": "EUR"}
             _currency = _currency_map.get(_cc, "")
-            if _currency and col("declare_price") > 0:
-                # 找申报单价列（实际币种写在附近，这里写备注或直接改Row2某列）
-                # 模板用 Row2 S列 = 申报币种*, 覆盖为实际币种
+            if _currency:
                 try:
-                    ccy_cell = ws.cell(row=2, column=col("declare_price"))
+                    ccy_cell = ws.cell(row=2, column=20)
                     if not isinstance(ccy_cell, MergedCell):
                         ccy_cell.value = _currency
                 except: pass
