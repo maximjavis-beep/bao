@@ -156,6 +156,7 @@ def weave_fba(data: dict, hs_code_override: Optional[str] = None) -> dict:
     return {
         "shipment_id": shipment_id,
         "shipment_name": meta.get("shipment_name", ""),
+        "country_code": meta.get("country_code", ""),
         "total_boxes": total_boxes,
         "total_weight": round(total_weight, 2),
         "total_cbm": round(total_cbm, 3),

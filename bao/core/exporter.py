@@ -302,6 +302,19 @@ class FBAExporter:
                 if val is not None:
                     self._set_col(ws, mr, mc, str(val), center, bf, YELLOW_FILL)
 
+        # ── 九方：币种写入 Row2 S列 ──
+        if _is_jiufang:
+            _cc = woven.get("country_code", "")
+            _currency_map = {"US": "USD", "CA": "USD", "AU": "USD", "UK": "GBP", "DE": "EUR"}
+            _currency = _currency_map.get(_cc, "")
+            if _currency and col("declare_price") > 0:
+                # 找申报单价列（实际币种写在附近，这里写备注或直接改Row2某列）
+                # 模板用 Row2 S列 = 申报币种*, 覆盖为实际币种
+                try:
+                    ccy_cell = ws.cell(row=2, column=col("declare_price"))
+                    if not isinstance(ccy_cell, MergedCell):
+                        ccy_cell.value = _currency
+                except: pass
         _temp_files = []
 
         for i, rd in enumerate(rows):
@@ -320,7 +333,8 @@ class FBAExporter:
             cat = None
             if _is_jiufang:
                 _ship_name = woven.get("shipment_name", "")
-                if ("香薰" in row_cn or "香氛" in row_cn or "挥发液" in _ship_name) and _jiufang_xiangxun:
+                _product_name = str(rd.get("标题", ""))
+                if ("香薰" in row_cn or "香氛" in row_cn or "挥发液" in _ship_name or "挥发液" in _product_name) and _jiufang_xiangxun:
                     cat = _jiufang_xiangxun
                 else:
                     cat = _jiufang_lazhu or _jiufang_fallback
@@ -335,6 +349,10 @@ class FBAExporter:
                             self._set_col(ws, r, c, _override_source[fld], center, bf, None)
                             _jiufang_written.add(fld)
                     # 灰色字段也从品类数据取值
+                    # 九方规则：Brand 固定为 M&SENSE
+                    if col("brand") > 0:
+                        self._set_col(ws, r, col("brand"), "M&SENSE", center, bf, None)
+                        _jiufang_written.add("brand")
                     for fld in _GREY_COPY_FIELDS:
                         if fld not in _override_source:
                             continue
@@ -406,6 +424,16 @@ class FBAExporter:
                 self._set_col(ws, r, col("asin_url"),
                               str(rd.get("ASIN", "")), center, bf, GRAY_FILL)
 
+            # ── 九方：采购单价=申报单价*7 公式 ──
+            if _is_jiufang and col("cost") > 0 and col("declare_price") > 0:
+                declare_col_letter = openpyxl.utils.get_column_letter(col("declare_price"))
+                declare_cell = f"{declare_col_letter}{r}"
+                ws.cell(row=r, column=col("cost")).value = f"={declare_cell}*7"
+                _jiufang_written.add("cost")
+            # ── 九方：ASIN 留空 ──
+            if _is_jiufang and col("asin_url") > 0:
+                ws.cell(row=r, column=col("asin_url")).value = ""
+                _jiufang_written.add("asin_url")
             # ── 图片 ──────────────────────────────────
             if col("image") > 0:
                 if _is_jiufang:

@@ -71,6 +71,10 @@ class FBAParser:
             elif "箱子数量" in lbl: meta["total_boxes"] = self._as_int(ws, row_idx, 1)
             elif "SKU 数量" in lbl or "SKU数量" in lbl: meta["sku_count"] = self._as_int(ws, row_idx, 1)
             elif "商品数量" in lbl: meta["item_count"] = self._as_int(ws, row_idx, 1)
+        # 从 B4 配送地址提取国家代码
+        addr = self._cell(ws, 3, 1).strip()  # row=4, col=1 (0-based: row=3, col=1)
+        if addr:
+            meta["country_code"] = addr.split(",")[0].strip().upper()
         return meta
 
     def _find_header_row(self, ws) -> int:
