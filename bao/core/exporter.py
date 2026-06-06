@@ -319,7 +319,8 @@ class FBAExporter:
             # ── 九方：按中文品名选择品类 ──────────────────
             cat = None
             if _is_jiufang:
-                if ("香薰" in row_cn or "香氛" in row_cn) and _jiufang_xiangxun:
+                _ship_name = woven.get("shipment_name", "")
+                if ("香薰" in row_cn or "香氛" in row_cn or "挥发液" in _ship_name) and _jiufang_xiangxun:
                     cat = _jiufang_xiangxun
                 else:
                     cat = _jiufang_lazhu or _jiufang_fallback
