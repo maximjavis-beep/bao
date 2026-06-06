@@ -137,6 +137,7 @@ def weave_fba(data: dict, hs_code_override: Optional[str] = None) -> dict:
             "英文品名": hs_fields.get("英文品名", ""),
             "中文品名": hs_fields.get("中文品名", ""),
             "品牌": hs_fields.get("备注", ""),
+            "amazon_title": item.get("title", ""),
             "材质": hs_fields.get("材质", ""),
             "用途": hs_fields.get("用途", ""),
             "总数量": declared_qty,

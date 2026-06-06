@@ -350,9 +350,11 @@ class FBAExporter:
                             self._set_col(ws, r, c, _override_source[fld], center, bf, None)
                             _jiufang_written.add(fld)
                     # 灰色字段也从品类数据取值
-                    # 九方规则：Brand 固定为 M&SENSE
+                    # 九方规则：Brand 取亚马逊标题第一个空格前的文字
                     if col("brand") > 0:
-                        self._set_col(ws, r, col("brand"), "M&SENSE", center, bf, None)
+                        _title = str(rd.get("amazon_title", ""))
+                        _brand = _title.split(" ")[0] if _title else "M&SENSE"
+                        self._set_col(ws, r, col("brand"), _brand, center, bf, None)
                         _jiufang_written.add("brand")
                     for fld in _GREY_COPY_FIELDS:
                         if fld not in _override_source:

@@ -8,7 +8,8 @@ class FBAParser:
         "msku": ["MSKU"],
         "product_name": ["品名"],
         "asin": ["ASIN"],
-        "title": ["标题", "品名"],
+        "title": ["标题"],   # B列：亚马逊完整标题（取第一个空格前为Brand）
+        "product_name2": ["品名"],  # F列：产品简称
         "input_hs_code": ["进口海关编码"],
         "declared_qty": ["商品申报量"],
         "boxed_qty": ["商品装箱量"],
@@ -45,6 +46,7 @@ class FBAParser:
                 "msku": msku.strip(),
                 "product_name": self._cell(ws, row_idx, col_map.get("product_name")),
                 "title": self._cell(ws, row_idx, col_map.get("title")),
+                "product_name": self._cell(ws, row_idx, col_map.get("product_name") or col_map.get("product_name2")),
                 "input_hs_code": self._cell(ws, row_idx, col_map.get("input_hs_code")),
                 "asin": self._cell(ws, row_idx, col_map.get("asin")),
                 "declared_qty": self._as_float(ws, row_idx, col_map.get("declared_qty")),
